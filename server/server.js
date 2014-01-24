@@ -66,12 +66,12 @@ function write_chunk(request, fileDescriptor, chunk, isLast, closePromise) {
 /*
  * Handle file upload
  */
-function upload_file(req, res) {
+function upload_file(request, response) {
     // Request body is binary
-    req.setBodyEncoding("binary");
+//    request.setBodyEncoding("binary");
 
     // Handle request as multipart
-    var stream = new multipart.Stream(req);
+    var stream = new multipart.Stream(request);
     
     // Create promise that will be used to emit event on file close
     var closePromise = new events.Promise();
@@ -100,7 +100,7 @@ function upload_file(req, res) {
             // If file is already open it is executed immediately
             openPromise.addCallback(function(fileDescriptor) {
                 // Write chunk to file
-                write_chunk(req, fileDescriptor, chunk, 
+                write_chunk(request, fileDescriptor, chunk, 
                     (stream.bytesReceived == stream.bytesTotal), closePromise);
             });
         });
@@ -113,10 +113,12 @@ function upload_file(req, res) {
         // Wait until file is closed
         closePromise.addCallback(function() {
             // Render response
-            res.sendHeader(200, {"Content-Type": "text/plain"});
-            res.sendBody("Thanks for playing!");
-            res.finish();
-        
+            var body = "Thanks for playing!";
+            response.writeHead(404, {
+              'Content-Length': body.length,
+              'Content-Type': 'text/plain' });
+            response.end(body);
+
             sys.puts("\n=> Done");
         });
     });
