@@ -1,9 +1,11 @@
 var http = require("http");
 var url = require("url");
-var multipart = require("multipart");
 var sys = require("sys");
 var events = require("events");
-var posix = require("posix");
+var formidable = require('formidable');
+var util = require('util');
+var fs   = require('fs');
+
 
 var server = http.createServer(function(req, res) {
     // Simple path-based request dispatcher
@@ -39,88 +41,72 @@ function display_form(request, response) {
 }
 
 /*
- * Write chunk of uploaded file
- */
-function write_chunk(request, fileDescriptor, chunk, isLast, closePromise) {
-    // Pause receiving request data (until current chunk is written)
-    request.pause();
-    // Write chunk to file
-    sys.debug("Writing chunk");
-    posix.write(fileDescriptor, chunk).addCallback(function() {
-        sys.debug("Wrote chunk");
-        // Resume receiving request data
-        request.resume();
-        // Close file if completed
-        if (isLast) {
-            sys.debug("Closing file");
-            posix.close(fileDescriptor).addCallback(function() {
-                sys.debug("Closed file");
-                
-                // Emit file close promise
-                closePromise.emitSuccess();
-            });
-        }
-    });
-}
-
-/*
  * Handle file upload
  */
 function upload_file(request, response) {
-    // Request body is binary
-//    request.setBodyEncoding("binary");
+    // if (request.method.toLowerCase() == 'post')
 
-    // Handle request as multipart
-    var stream = new multipart.Stream(request);
-    
-    // Create promise that will be used to emit event on file close
-    var closePromise = new events.Promise();
+    var form = new formidable.IncomingForm();
+    form.uploadDir = "/Users/dragvs/Dev/CrashesOnline/server/tmp_upload";
 
-    // Add handler for a request part received
-    stream.addListener("part", function(part) {
-        sys.debug("Received part, name = " + part.name + ", filename = " + part.filename);
-        
-        var openPromise = null;
+    var targetDir = "/Users/dragvs/Dev/CrashesOnline/server/uploaded";
 
-        // Add handler for a request part body chunk received
-        part.addListener("body", function(chunk) {
-            // Calculate upload progress
-            var progress = (stream.bytesReceived / stream.bytesTotal * 100).toFixed(2);
-            var mb = (stream.bytesTotal / 1024 / 1024).toFixed(1);
-     
-            sys.debug("Uploading " + mb + "mb (" + progress + "%)");
-
-            // Ask to open/create file (if not asked before)
-            if (openPromise == null) {
-                sys.debug("Opening file");
-                openPromise = posix.open("./uploads/" + part.filename, process.O_CREAT | process.O_WRONLY, 0600);
-            }
-
-            // Add callback to execute after file is opened
-            // If file is already open it is executed immediately
-            openPromise.addCallback(function(fileDescriptor) {
-                // Write chunk to file
-                write_chunk(request, fileDescriptor, chunk, 
-                    (stream.bytesReceived == stream.bytesTotal), closePromise);
-            });
-        });
+    form.on('fileBegin', function(name, file) {
+        console.log("Form on File begin: " + file.name);
     });
 
-    // Add handler for the request being completed
-    stream.addListener("complete", function() {
-        sys.debug("Request complete");
+    form.on('progress', function(bytesReceived, bytesExpected) {
+        var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
+        var receivedKb = (bytesReceived / 1024).toFixed(1);
+        var expectedKb = (bytesExpected / 1024).toFixed(1);
+     
+        console.log("Form Uploading " + receivedKb + " Kb of " + expectedKb + " Kb (" + progress + "%)");
+    });
 
-        // Wait until file is closed
-        closePromise.addCallback(function() {
-            // Render response
-            var body = "Thanks for playing!";
-            response.writeHead(404, {
-              'Content-Length': body.length,
-              'Content-Type': 'text/plain' });
-            response.end(body);
+    form.on('error', function(err) {
+        console.error("Form error: " + err);
+    });
 
-            sys.puts("\n=> Done");
-        });
+    form.on('end', function(fields, files) {
+        console.log("Form on End");
+
+        // for (var file in this.openedFiles) {
+        {
+            var file = this.openedFiles[0];
+            console.log("   File path " + file.path);
+            console.log("   File name " + file.name);
+
+            var newFilePath = targetDir + "/" + file.name;
+
+            // fs.copy(file.path, newFilePath, function(err) {  
+            //     if (err) {
+            //         console.error(err);
+            //     } else {
+            //         console.log("tmp uploaded file copied!")
+            //     }
+            // });
+            fs.rename(file.path, newFilePath, function(err2) {  
+                if (err2) {
+                    console.error("File rename error: " + err2);
+                } else {
+                    console.log("Uploaded tmp file renamed");
+                }
+            });
+        }
+    });
+
+    form.parse(request, function(err, fields, files) {
+        console.log("Form on Parse");
+
+        // Render response
+        var body = "Thanks for playing!\n";
+        body = body + "received upload:\n\n";
+        body = body + util.inspect({fields: fields, files: files});
+
+        response.writeHead(200, {
+          'Content-Length': body.length,
+          'Content-Type': 'text/plain' });
+        response.end(body);
     });
 }
 
