@@ -21,7 +21,7 @@ var server = http.createServer(function(req, res) {
 });
 
 // Server would listen on port 8000
-server.listen(8000);
+server.listen(80);
 
 /*
  * Display upload form
