@@ -26,7 +26,7 @@ server.listen(80);
 /*
  * Display upload form
  */
-function display_form(req, res) {
+function display_form(request, response) {
     var body = '<h1>Hello!</h1>'+
         '<form action="/upload" method="post" enctype="multipart/form-data">'+
         '<input type="file" name="upload-file">'+
@@ -35,7 +35,7 @@ function display_form(req, res) {
     response.writeHead(200, {
       'Content-Length': body.length,
       'Content-Type': 'text/html' });
-    res.end(body);
+    response.end(body);
 }
 
 /*
@@ -125,10 +125,10 @@ function upload_file(req, res) {
 /*
  * Handles page not found error
  */
-function show_404(req, res) {
+function show_404(request, response) {
     var body = "You'r doing it wrong!";
     response.writeHead(404, {
       'Content-Length': body.length,
       'Content-Type': 'text/plain' });
-    res.end(body);
+    response.end(body);
 }
