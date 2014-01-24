@@ -27,15 +27,15 @@ server.listen(80);
  * Display upload form
  */
 function display_form(req, res) {
-    res.sendHeader(200, {"Content-Type": "text/html"});
-    res.sendBody(
-        '<h1>Hello!</h1>'+
+    var body = '<h1>Hello!</h1>'+
         '<form action="/upload" method="post" enctype="multipart/form-data">'+
         '<input type="file" name="upload-file">'+
         '<input type="submit" value="Upload">'+
-        '</form>'
-    );
-    res.finish();
+        '</form>';
+    response.writeHead(200, {
+      'Content-Length': body.length,
+      'Content-Type': 'text/html' });
+    res.end(body);
 }
 
 /*
@@ -126,7 +126,9 @@ function upload_file(req, res) {
  * Handles page not found error
  */
 function show_404(req, res) {
-    res.sendHeader(404, {"Content-Type": "text/plain"});
-    res.sendBody("You r doing it rong!");
-    res.finish();
+    var body = "You'r doing it wrong!";
+    response.writeHead(404, {
+      'Content-Length': body.length,
+      'Content-Type': 'text/plain' });
+    res.end(body);
 }
