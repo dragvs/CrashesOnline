@@ -5,10 +5,13 @@ var events = require("events");
 var util = require('util');
 var crypto = require('crypto');
 var path = require('path')
-var formidable = require('formidable');
 var fs   = require('fs');
 var exec = require('child_process').exec;
+// third-party:
+var formidable = require('formidable');
 var mkdirp = require('mkdirp');
+var async = require('async');
+var archiver = require('archiver');
 
 
 var server = http.createServer(function(req, res) {
@@ -23,6 +26,9 @@ var server = http.createServer(function(req, res) {
         case '/ucd':
             uploadClientDump(req, res);
             break;
+        case '/get':
+            sendBackSymbolsAndCrashes(req, res);
+            break;
         default:
             sendTextResponse(res, "You'r doing it wrong!", 404);
             break;
@@ -32,7 +38,8 @@ var server = http.createServer(function(req, res) {
 var configFilePath = __dirname + '/config.json';
 var configData;
 
-var dumpSymsToolPath = __dirname + "/../tools/google-breakpad/mac/dump_syms";
+var dumpSymsToolPath = __dirname + "/../tools/google-breakpad/x86_64-linux/dump_syms";
+// var dumpSymsToolPath = __dirname + "/../tools/google-breakpad/mac/dump_syms";
 
 var workingFolderPath       = __dirname + "/test1";
 var symbolsFolderPath       = workingFolderPath + "/symbols";
@@ -162,19 +169,20 @@ function uploadClientLib(request, response) {
             } else {
                 console.log('Client lib META saved');
             }
-        });
 
-        // Write file
-        var newFilePath = uploadTargetPath + "/" + file.name + "." + tmpFileName;
-        console.log("   File target path " + newFilePath);
+            // TODO Run in parallel and wait for the operations to complete before 'processClientLib' call
+            // Write file
+            var newFilePath = uploadTargetPath + "/" + file.name + "." + tmpFileName;
+            console.log("   File target path " + newFilePath);
 
-        fs.rename(file.path, newFilePath, function(err2) {  
-            if (err2) {
-                console.error("File rename error: " + err2);
-            } else {
-                processClientLib(newFilePath);
-                console.log("Uploaded tmp file renamed");
-            }
+            fs.rename(file.path, newFilePath, function(err2) {  
+                if (err2) {
+                    console.error("File rename error: " + err2);
+                } else {
+                    processClientLib(newFilePath, metaFilePath);
+                    console.log("Uploaded tmp file renamed");
+                }
+            });
         });
 
         // Render response
@@ -182,7 +190,7 @@ function uploadClientLib(request, response) {
     });
 }
 
-function processClientLib(libPath) {
+function processClientLib(libPath, metaFilePath) {
     var symFilePath = libPath + ".sym";
     var command = dumpSymsToolPath + " " + libPath + " > " + symFilePath;
 
@@ -231,6 +239,9 @@ function processClientLib(libPath) {
 
                     console.log("SYM file target path: " + symFileTargetPath);
 
+                    var metaFileName = path.basename(metaFilePath);
+                    var metaFileTargetPath = symFileFolderPath + "/" + metaFileName;
+
                     if (fs.existsSync(symFileTargetPath)) {
                         var newStat = fs.statSync(symFilePath);
                         var oldStat = fs.statSync(symFileTargetPath);
@@ -238,10 +249,17 @@ function processClientLib(libPath) {
                         if (newStat.size == oldStat.size) {
                             console.log("Found SYM file with same UUID (" + soUuid + 
                                 ") and file size: " + oldStat.size + " bytes");
+
+                            // Error handling should be added
+                            fs.createReadStream(metaFilePath).pipe(fs.createWriteStream(metaFileTargetPath));
                         } else {
                             console.log("ERROR: Found SYM file with same UUID (" + soUuid + 
                                 ") but different size: " + newStat.size + " bytes instead of " + 
                                 oldStat.size + " bytes");
+
+                            // Error handling should be added
+                            fs.createReadStream(metaFilePath).pipe(
+                                fs.createWriteStream(metaFileTargetPath + ".error"));
                         }
                     } else {
                         checkAndCreateDir(symFileFolderPath);
@@ -253,6 +271,9 @@ function processClientLib(libPath) {
                                 console.log("SYM file moved to target path: " + symFileTargetPath);
                             }
                         });
+
+                        // Error handling should be added
+                        fs.createReadStream(metaFilePath).pipe(fs.createWriteStream(metaFileTargetPath));
                     }
                 }
             });
@@ -326,6 +347,96 @@ function uploadClientDump(request, response) {
         sendTextResponse(response, "Operation: OK", 200);
     });
 }
+
+/*
+ * Send back to the caller compressed symbols and crash dumps data
+ */
+function sendBackSymbolsAndCrashes(request, response) {
+    var archive = archiver('zip');
+    archive.pipe(response);
+
+    addDirToArchive(archive, clientDumpTargetPath, function(err) {
+        if (err) {
+            console.error("::sendBackSymbolsAndCrashes Zipping crash dumps error: " + err);
+            return;
+        }
+
+        addDirToArchive(archive, symbolsFolderPath, function(err2) {
+            if (err2) {
+                console.error("::sendBackSymbolsAndCrashes Zipping symbols error: " + err2);
+                return;
+            }
+
+            archive.finalize();  
+            console.log("::sendBackSymbolsAndCrashes ZIP finalized");
+        });
+    });
+
+    console.log("::sendBackSymbolsAndCrashes end");
+}
+
+function addDirToArchive(archive, dirPath, callback) {
+    var parentDirPath = path.dirname(dirPath);
+    var dirName = path.basename(dirPath);
+
+    listFilesRecursively(dirPath, dirName + "/", function(err, files) {
+        if (err) {
+            callback(err);
+            return;
+        }
+
+        function zipFile(fileRelPath, zipCallback) {
+            // console.log("::addDirToArchive Zipping file: " + fileRelPath);
+
+            var fileAbsPath = parentDirPath + "/" + fileRelPath;
+            archive.append(fs.createReadStream(fileAbsPath), { name: fileRelPath });
+
+            zipCallback(null);
+        }
+
+        async.eachSeries(files, zipFile, function(err2) {
+            if (err2) {
+                callback(err2);
+                return;
+            }
+            callback(null);
+        });
+    });
+}
+
+function listFilesRecursively(dirPath, subdirPath, doneCallback) {
+    var files = [];
+
+    fs.readdir(dirPath, function(err, entryArr) {
+        if (err) {
+            doneCallback(err, files);
+            return;
+        }
+
+        var pending = entryArr.length;
+        if (!pending) 
+            return doneCallback(null, files);
+
+        entryArr.forEach(function(entryName) {
+            var entryPath = dirPath + '/' + entryName;
+
+            fs.stat(entryPath, function(err, stat) {
+                if (stat && stat.isDirectory()) {
+                    listFilesRecursively(entryPath, subdirPath + entryName + "/", function(err, res) {
+                        files = files.concat(res);
+                        if (!--pending) doneCallback(null, files);
+                    });
+                } else if (stat && stat.isFile()) {
+                    files.push(subdirPath + entryName);
+                    if (!--pending) doneCallback(null, files);
+                } else {
+                    --pending;
+                }
+            });
+        });
+    });
+}
+
 
 function getClientMeta(fields, appConfig, appVersion) {
     var meta = "ApiKey: " + appConfig.apiKey + "\n";
