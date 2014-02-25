@@ -17,7 +17,7 @@ var archiver = require('archiver');
 var server = http.createServer(function(req, res) {
     // Simple path-based request dispatcher
     switch (url.parse(req.url).pathname) {
-        case '/':
+        case '/manual':
             display_form(req, res); // TODO remove test form UI
             break;
         case '/ucl':
@@ -38,6 +38,7 @@ var server = http.createServer(function(req, res) {
 var configFilePath = __dirname + '/config.json';
 var configData;
 
+// TODO read all paths from config.json
 var dumpSymsToolPath = __dirname + "/../tools/google-breakpad/x86_64-linux/dump_syms";
 // var dumpSymsToolPath = __dirname + "/../tools/google-breakpad/mac/dump_syms";
 
@@ -91,6 +92,8 @@ function getFileNameWithoutExt(filePath) {
  * Display upload form
  */
 function display_form(request, response) {
+    console.log("::display_form called");
+
     var body = '<h1>Hello!</h1>'+
         '<form action="/ucl" method="post" enctype="multipart/form-data">'+
         '<input type="text" name="apiKey" style="width: 750px;" value="Itp9g4219uvmPxXYUmR546VjbXrJGknhdh5GY72gUoGxujzHbczj31PNKsXE25rYCS0ukQyGyCOX9IbszYzq3A=="><br/>'+
@@ -352,6 +355,8 @@ function uploadClientDump(request, response) {
  * Send back to the caller compressed symbols and crash dumps data
  */
 function sendBackSymbolsAndCrashes(request, response) {
+    console.log("::sendBackSymbolsAndCrashes begin");
+
     var archive = archiver('zip');
     archive.pipe(response);
 
