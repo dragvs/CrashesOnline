@@ -533,6 +533,9 @@ function getClientMeta(fields, appConfig, appVersion) {
     meta += "AppId: " + appConfig.appId + "\n";
     meta += "AppVersion: " + appVersion + "\n";
 
+    var date = new Date();
+    meta += "CreateDateTime: " + date.toISOString() + "\n";
+
     meta += "ID: " + fields['meta.ID'] + "\n";
     meta += "MANUFACTURER: " + fields['meta.MANUFACTURER'] + "\n";
     meta += "MODEL: " + fields['meta.MODEL'] + "\n";
