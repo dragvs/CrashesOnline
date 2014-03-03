@@ -1,16 +1,16 @@
-[
-	{
-		"description": "simpleapp",
-		"apiKey": "Itp9g4219uvmPxXYUmR546VjbXrJGknhdh5GY72gUoGxujzHbczj31PNKsXE25rYCS0ukQyGyCOX9IbszYzq3A==",
-		"appId": "com.redsteep.simpleapp",
-		"libUpload": true,
-		"dumpUpload": true
-	},
-	{
-		"description": "simpleappfull",
-		"apiKey": "Wh+po3JpF5Kh63Nslh1feKB8rV7PkVQVQRWOe6jaoCuGyJ5KQwPQ5SXAjp0qe1JkzTlEGwih7MKCgxsn0hEl9A==",
-		"appId": "com.redsteep.simpleappfull",
-		"libUpload": true,
-		"dumpUpload": true
-	}
-]
+{
+	"clientsFilePath" : "clients.json",
+
+	"dumpSymsToolPath" : 		"../tools/google-breakpad/x86_64-linux/dump_syms",
+	"_dumpSymsToolPath" : 		"../tools/google-breakpad/mac/dump_syms",
+	"symbolicationToolPath" : 	"../tools/google-breakpad/mac/minidump_stackwalk",
+	"_symbolicationToolPath" : 	"../tools/google-breakpad/x86_64-linux/minidump_stackwalk",
+
+	"workingFolderPath" : 		"tegra2",
+
+	"symbolsFolderPath" :   	"symbols",
+	"clientLibTargetPath" : 	"clientLibUpload",
+	"clientLibTempPath" :   	"tmp_clientLibUpload",
+	"clientDumpTargetPath" :	"dumpUpload",
+	"clientDumpTempPath" :  	"tmp_dumpUpload"
+}

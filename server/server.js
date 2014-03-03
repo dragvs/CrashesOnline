@@ -29,6 +29,9 @@ var server = http.createServer(function(req, res) {
         case '/get':
             sendBackSymbolsAndCrashes(req, res);
             break;
+        case '/report':
+            showCrashReport(req, res);
+            break;
         default:
             sendTextResponse(res, "You'r doing it wrong!", 404);
             break;
@@ -38,36 +41,95 @@ var server = http.createServer(function(req, res) {
 var configFilePath = __dirname + '/config.json';
 var configData;
 
-// TODO read all paths from config.json
-var dumpSymsToolPath = __dirname + "/../tools/google-breakpad/x86_64-linux/dump_syms";
-// var dumpSymsToolPath = __dirname + "/../tools/google-breakpad/mac/dump_syms";
+var clientsFilePath;
+var clientsData;
 
-var workingFolderPath       = __dirname + "/test1";
-var symbolsFolderPath       = workingFolderPath + "/symbols";
-var clientLibTargetPath     = workingFolderPath + "/clientLibUpload";
-var clientLibTempPath       = workingFolderPath + "/tmp_clientLibUpload";
-var clientDumpTargetPath    = workingFolderPath + "/dumpUpload";
-var clientDumpTempPath      = workingFolderPath + "/tmp_dumpUpload";
+var dumpSymsToolPath;
+var symbolicationToolPath;
+
+var workingFolderPath;
+var symbolsFolderPath;
+var clientLibTargetPath;
+var clientLibTempPath;
+var clientDumpTargetPath;
+var clientDumpTempPath;
 
 
 main();
 
-function main() {
+function makeFullPath(configPath) {
+    // TODO check if 'configPath' is absolute already 
+    return __dirname + "/" + configPath;
+}
+
+function readClientsConfig(callback) {
+    fs.readFile(clientsFilePath, 'utf8', function (err, data) {
+        if (err) {
+            console.log('Error reading clients config file: ' + err);
+            callback(err);
+            return;
+        }
+     
+        clientsData = JSON.parse(data);
+        console.log("Clients config data: ");
+        console.dir(clientsData);
+
+        callback(null);
+    });
+}
+
+function readServerConfig(callback) {
     fs.readFile(configFilePath, 'utf8', function (err, data) {
         if (err) {
-            console.log('Error reading config file: ' + err);
+            console.log('Error reading server config file: ' + err);
+            callback(err);
             return;
         }
      
         configData = JSON.parse(data);
+        console.log("Server config data: ");
         console.dir(configData);
 
-        console.log("New API key: " + generateApiKey());
+        // Parse config & Prepare folders
+        clientsFilePath         = makeFullPath(configData["clientsFilePath"]);
+        
+        dumpSymsToolPath        = makeFullPath(configData["dumpSymsToolPath"]);
+        symbolicationToolPath   = makeFullPath(configData["symbolicationToolPath"]);
 
+        workingFolderPath       = makeFullPath(configData["workingFolderPath"]);
+        symbolsFolderPath       = workingFolderPath + "/" + configData["symbolsFolderPath"];
+        clientLibTargetPath     = workingFolderPath + "/" + configData["clientLibTargetPath"];
+        clientLibTempPath       = workingFolderPath + "/" + configData["clientLibTempPath"];
+        clientDumpTargetPath    = workingFolderPath + "/" + configData["clientDumpTargetPath"];
+        clientDumpTempPath      = workingFolderPath + "/" + configData["clientDumpTempPath"];
+
+        checkAndCreateDir(symbolsFolderPath);
         checkAndCreateDir(clientLibTargetPath);
         checkAndCreateDir(clientLibTempPath);
         checkAndCreateDir(clientDumpTargetPath);
         checkAndCreateDir(clientDumpTempPath);
+
+        // Clients config
+        readClientsConfig(function(err) {
+            if (err) {
+                console.log('Error reading clients config: ' + err);
+                callback(err);
+                return;
+            }
+
+            callback(null);
+        });
+    });
+}
+
+function main() {
+    console.log("New API key: " + generateApiKey());
+
+    readServerConfig(function(err) {
+        if (err) {
+            console.log('Error reading server config: ' + err);
+            return;
+        }
 
         // Server would listen on port 80
         server.listen(80);
@@ -148,7 +210,7 @@ function uploadClientLib(request, response) {
         console.log("   App id: " + appId);
         console.log("   App version: " + appVersion);
 
-        var appConfig = findAppConfig(apiKey) //configData[apiKey];
+        var appConfig = findClientConfig(apiKey) //clientsData[apiKey];
         
         if (!appConfig || appConfig.appId != appId) {
             sendTextResponse(response, "ApiKey or App id is incorrect!", 403);
@@ -305,7 +367,7 @@ function uploadClientDump(request, response) {
         console.log("   App id: " + appId);
         console.log("   App version: " + appVersion);
 
-        var appConfig = findAppConfig(apiKey) //configData[apiKey];
+        var appConfig = findClientConfig(apiKey) //clientsData[apiKey];
         
         if (!appConfig || appConfig.appId != appId) {
             sendTextResponse(response, "ApiKey or App id is incorrect!", 403);
@@ -409,6 +471,29 @@ function addDirToArchive(archive, dirPath, callback) {
     });
 }
 
+/*
+ * Show crash report
+ */
+function showCrashReport(request, response) {
+    console.log("::showCrashReport begin");
+
+    var dumpFilePath = clientDumpTargetPath + "/hotd3amznfree/1.dmp";
+    var command = symbolicationToolPath + " " + dumpFilePath + " " + symbolsFolderPath;
+
+    var child1 = exec(command, function(err, stdout, stderr) {
+        console.log("::showCrashReport crash report exec finished");
+
+        if (err) {
+            console.error("::showCrashReport dump_syms exec error: " + error);
+            console.error("::showCrashReport dump_syms exec stderr: " + stderr);
+            // TODO send error response
+            return;
+        }
+
+        sendTextResponse(response, stdout, 200);
+    });
+}
+
 function listFilesRecursively(dirPath, subdirPath, doneCallback) {
     var files = [];
 
@@ -477,10 +562,10 @@ function sendHtmlResponse(response, text, statusCode) {
     response.end(text);
 }
 
-function findAppConfig(apiKey) {
-    for (i = 0; i < configData.length; i++) {
-        if (configData[i]["apiKey"] == apiKey)
-            return configData[i];
+function findClientConfig(apiKey) {
+    for (i = 0; i < clientsData.length; i++) {
+        if (clientsData[i]["apiKey"] == apiKey)
+            return clientsData[i];
     }
     return null;
 }
