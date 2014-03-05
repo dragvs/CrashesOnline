@@ -12,5 +12,8 @@
 	"clientLibTargetPath" : 	"clientLibUpload",
 	"clientLibTempPath" :   	"tmp_clientLibUpload",
 	"clientDumpTargetPath" :	"dumpUpload",
-	"clientDumpTempPath" :  	"tmp_dumpUpload"
+	"clientDumpTempPath" :  	"tmp_dumpUpload",
+
+	"db_connection_url" :		"mongodb://localhost/test",
+	"http_server_port" :		80
 }

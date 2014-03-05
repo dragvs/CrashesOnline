@@ -12,6 +12,7 @@ var formidable = require('formidable');
 var mkdirp = require('mkdirp');
 var async = require('async');
 var archiver = require('archiver');
+var mongoose = require('mongoose');
 
 
 var server = http.createServer(function(req, res) {
@@ -29,8 +30,14 @@ var server = http.createServer(function(req, res) {
         case '/get':
             sendBackSymbolsAndCrashes(req, res);
             break;
+        case '/dumps':
+            showDumpsList(req, res);
+            break;
         case '/report':
             showCrashReport(req, res);
+            break;
+        case '/meta':
+            showDumpMeta(req, res);
             break;
         default:
             sendTextResponse(res, "You'r doing it wrong!", 404);
@@ -38,15 +45,18 @@ var server = http.createServer(function(req, res) {
     }
 });
 
+// Configs
 var configFilePath = __dirname + '/config.json';
 var configData;
 
 var clientsFilePath;
-var clientsData;
+var clientsDataArr; // TODO add 'id' to clientData
 
+// Tools
 var dumpSymsToolPath;
 var symbolicationToolPath;
 
+// Working paths
 var workingFolderPath;
 var symbolsFolderPath;
 var clientLibTargetPath;
@@ -54,11 +64,34 @@ var clientLibTempPath;
 var clientDumpTargetPath;
 var clientDumpTempPath;
 
+// Database
+var CrashDump;
 
 main();
 
+
+String.prototype.startsWith = function(prefix) {
+    return this.indexOf(prefix) == 0;
+};
+String.prototype.endsWith = function(suffix) {
+    return this.indexOf(suffix, this.length - suffix.length) !== -1;
+};
+if (!String.prototype.format) {
+    String.prototype.format = function() {
+        var args = arguments;
+        return this.replace(/{(\d+)}/g, function(match, number) { 
+            return typeof args[number] != 'undefined'
+                ? args[number]
+                : match
+            ;
+        });
+    };
+}
+
 function makeFullPath(configPath) {
-    // TODO check if 'configPath' is absolute already 
+    if (configPath.startsWith("/"))
+        return configPath;
+
     return __dirname + "/" + configPath;
 }
 
@@ -70,9 +103,9 @@ function readClientsConfig(callback) {
             return;
         }
      
-        clientsData = JSON.parse(data);
+        clientsDataArr = JSON.parse(data);
         console.log("Clients config data: ");
-        console.dir(clientsData);
+        console.dir(clientsDataArr);
 
         callback(null);
     });
@@ -122,8 +155,156 @@ function readServerConfig(callback) {
     });
 }
 
+function parseClientMeta(metaStr) {
+    if (!metaStr)
+        return null;
+
+    var metaData = new Object();
+    var metaLines = metaStr.split("\n");
+
+    for (i = 0; i < metaLines.length; i++) {
+        var line = metaLines[i];
+        var separatorIdx = line.indexOf(":");
+        if (separatorIdx == -1)
+            continue;
+
+        var key = line.substring(0, separatorIdx);
+        var value = line.substring(separatorIdx+2, line.length);
+        metaData[key] = value;
+    }
+
+    return metaData;
+}
+
+function printCrashDumpTable() {
+    CrashDump.find().exec(function (err, dumps) {
+        if (err) return console.error(err);
+        console.log("Found dumps: " + dumps);
+    });
+}
+
+function cleanCrashDumpTable(callback) {
+    CrashDump.remove(function(err) {
+        if (err) {
+            console.error("::cleanCrashDumpsTable Failed to clean table: " + err);
+            return callback(err);
+        }
+        console.log("::cleanCrashDumpsTable CrashDump table cleaned");
+        callback(null);
+    });
+}
+
+// TODO Implement callback
+function populateCrashDumpTable(callback) {
+    clientsDataArr.forEach(function(clientData) {
+        var clientId = clientData["description"];
+        var dumpsPath = clientDumpTargetPath + "/" + clientId;
+
+        if (!fs.existsSync(dumpsPath))
+            return;
+
+        console.log("::addCrashDumpsToDb Searching dumps in: " + clientId);
+
+        var dumpFiles = fs.readdirSync(dumpsPath);
+        var dumpFilesPending = dumpFiles.length;
+
+        dumpFiles.forEach(function(dumpFileName) {
+            if (dumpFileName.startsWith(".") || dumpFileName.endsWith(".meta")) {
+                console.log("::addCrashDumpsToDb Skipping file: " + dumpFileName);
+                return;
+            }
+
+            console.log("::addCrashDumpsToDb Found dump file: " + dumpFileName);
+
+            var dumpFilePath = dumpsPath + "/" + dumpFileName;
+            var stats = fs.statSync(dumpFilePath);
+
+            var dumpEntry = new CrashDump();
+            dumpEntry.uploadDate = stats.mtime;
+            dumpEntry.dumpFileName = dumpFileName;
+            dumpEntry.clientId = clientId;
+            dumpEntry.appId = "#none";
+            dumpEntry.appVersion = "#none";
+            dumpEntry.meta = "#none";
+            
+            var metaFileName = dumpFileName + ".meta";
+            var metaFilePath = dumpsPath + "/" + metaFileName;
+            var metaObject = null;
+
+            if (fs.existsSync(metaFilePath)) {
+                console.log("::addCrashDumpsToDb Dump file META: " + metaFileName);
+
+                dumpEntry.metaFileName = metaFileName;
+
+                metaObject = parseClientMeta(fs.readFileSync(metaFilePath, 'utf8'));
+                // console.dir(metaObject);
+            }
+
+            if (metaObject) {
+                dumpEntry.appId = metaObject["AppId"];
+                dumpEntry.appVersion = metaObject["AppVersion"];
+                delete metaObject["AppId"];
+                delete metaObject["AppVersion"];
+                delete metaObject["ApiKey"];                
+                // console.log("::addCrashDumpsToDb Entry META object: ");
+                // console.dir(metaObject);
+                dumpEntry.meta = util.inspect(metaObject);
+            }
+
+            dumpEntry.save(function (err) {
+                if (err) 
+                    return console.error("::addCrashDumpsToDb Failed to save CrashDump entry, error: " + err);
+                console.log("::addCrashDumpsToDb CrashDump entry saved");
+            });
+        });
+    });
+}
+
+function initDbModels() {
+    var crashDumpSchema = mongoose.Schema({
+        uploadDate: Date,
+        dumpFileName: String,
+        metaFileName: String,
+
+        clientId: String,
+        appId: String,
+        appVersion: String,
+        meta: String
+    });
+    CrashDump = mongoose.model('CrashDump', crashDumpSchema);    
+}
+
+function setDbConnectionCallback(callback) {
+    var db = mongoose.connection;
+    db.on('error', function(err) {
+        console.error('DB connection error: ' + err);
+        callback(err);
+    });
+    db.once('open', function() {
+        console.log("Successfully connected to DB");
+
+        callback(null);
+    });   
+}
+
 function main() {
     console.log("New API key: " + generateApiKey());
+
+    initDbModels();
+
+    setDbConnectionCallback(function (err) {
+        if (err) return console.error("Init database error: " + err);
+
+        // printCrashDumpTable(function(err) {});
+        // cleanCrashDumpTable(function(err) {});
+        // populateCrashDumpTable(function(err) {
+        // });
+
+        // Server would listen on port 80
+        var httpServerPort = configData["http_server_port"];
+        server.listen(httpServerPort);
+        console.log("HTTP server started, port: " + httpServerPort);
+    });
 
     readServerConfig(function(err) {
         if (err) {
@@ -131,8 +312,7 @@ function main() {
             return;
         }
 
-        // Server would listen on port 80
-        server.listen(80);
+        mongoose.connect(configData["db_connection_url"]);
     });
 }
 
@@ -154,7 +334,7 @@ function getFileNameWithoutExt(filePath) {
  * Display upload form
  */
 function display_form(request, response) {
-    console.log("::display_form called");
+    console.log("::display_form begin");
 
     var body = '<h1>Hello!</h1>'+
         '<form action="/ucl" method="post" enctype="multipart/form-data">'+
@@ -210,7 +390,7 @@ function uploadClientLib(request, response) {
         console.log("   App id: " + appId);
         console.log("   App version: " + appVersion);
 
-        var appConfig = findClientConfig(apiKey) //clientsData[apiKey];
+        var appConfig = findClientConfig(apiKey);
         
         if (!appConfig || appConfig.appId != appId) {
             sendTextResponse(response, "ApiKey or App id is incorrect!", 403);
@@ -367,7 +547,7 @@ function uploadClientDump(request, response) {
         console.log("   App id: " + appId);
         console.log("   App version: " + appVersion);
 
-        var appConfig = findClientConfig(apiKey) //clientsData[apiKey];
+        var appConfig = findClientConfig(apiKey);
         
         if (!appConfig || appConfig.appId != appId) {
             sendTextResponse(response, "ApiKey or App id is incorrect!", 403);
@@ -472,25 +652,94 @@ function addDirToArchive(archive, dirPath, callback) {
 }
 
 /*
+ * Show crash dumps list
+ */
+function showDumpsList(request, response) {
+    console.log("::showDumpsList begin");
+
+    CrashDump.find().select('_id uploadDate appId appVersion')
+    .exec(function (err, dumpsArr) {
+        if (err) return console.error(err); // TODO send response
+        // console.log("Found dumps: " + dumpsArr);
+
+        var body = '<h1>Crash dumps:</h1>';
+        
+        for (i = 0; i < dumpsArr.length; i++) {
+            var dumpEntry = dumpsArr[i];
+
+            var reportLink = '<a href="/report?id={0}">{1}</a>'
+                .format(dumpEntry._id, dumpEntry.uploadDate.toISOString());
+
+            var metaLink = '<a href="/meta?id={0}">META</a>'.format(dumpEntry._id);
+
+            body += '<div style="margin-top: 5px;">'
+            body += reportLink;
+            body += '<div style="margin-left: 10px; display: inline;"></div>';
+            body += metaLink;
+            body += '<div style="margin-left: 10px; display: inline;">App Id: {0} | App version: {1}</div>'
+                .format(dumpEntry.appId, dumpEntry.appVersion);
+            body += '</div>';
+        }
+
+        // console.log("::showDumpsList Result body: " + body);
+        sendHtmlResponse(response, body, 200);
+    });
+}
+
+/*
  * Show crash report
  */
 function showCrashReport(request, response) {
     console.log("::showCrashReport begin");
 
-    var dumpFilePath = clientDumpTargetPath + "/hotd3amznfree/1.dmp";
-    var command = symbolicationToolPath + " " + dumpFilePath + " " + symbolsFolderPath;
+    var query = url.parse(request.url, true).query;
+    var dumpId = query["id"];
+    console.log("::showCrashReport Dump id: " + dumpId);
 
-    var child1 = exec(command, function(err, stdout, stderr) {
-        console.log("::showCrashReport crash report exec finished");
+    CrashDump.findOne({ "_id": dumpId}).select('clientId dumpFileName')
+    .exec(function (err, dumpEntry) {
+        if (err) return console.error(err); // TODO send response
+        // console.log("::showCrashReport Found dump: " + dumpEntry);
 
-        if (err) {
-            console.error("::showCrashReport dump_syms exec error: " + error);
-            console.error("::showCrashReport dump_syms exec stderr: " + stderr);
-            // TODO send error response
-            return;
-        }
+        var dumpFilePath = clientDumpTargetPath + "/" + dumpEntry.clientId +"/" + dumpEntry.dumpFileName;
+        console.log("::showCrashReport Dump file path: " + dumpFilePath);
 
-        sendTextResponse(response, stdout, 200);
+        var command = symbolicationToolPath + " " + dumpFilePath + " " + symbolsFolderPath;
+
+        var child1 = exec(command, function(err, stdout, stderr) {
+            console.log("::showCrashReport crash report exec finished");
+
+            if (err) {
+                console.error("::showCrashReport symbolication exec error: " + err);
+                console.error("::showCrashReport symbolication exec stderr: " + stderr);
+                // TODO send error response
+                return;
+            }
+
+            sendTextResponse(response, stdout, 200);
+        });
+    });
+}
+
+/*
+ *
+ */
+function showDumpMeta(request, response) {
+    console.log("::showDumpMeta begin");
+
+    var query = url.parse(request.url, true).query;
+    var dumpId = query["id"];
+    console.log("::showDumpMeta Dump id: " + dumpId);
+
+    CrashDump.findOne({ "_id": dumpId}).select('meta')
+    .exec(function (err, dumpEntry) {
+        if (err) return console.error(err); // TODO send response
+        // console.log("::showDumpMeta Found dump: " + dumpEntry);
+
+        // var metaFilePath = clientDumpTargetPath + "/" + dumpEntry.clientId +"/" + dumpEntry.metaFileName;
+        // console.log("::showDumpMeta Dump meta file path: " + metaFilePath);
+
+        sendTextResponse(response, dumpEntry.meta, 200);
     });
 }
 
@@ -527,7 +776,7 @@ function listFilesRecursively(dirPath, subdirPath, doneCallback) {
     });
 }
 
-
+// TODO Use JSON
 function getClientMeta(fields, appConfig, appVersion) {
     var meta = "ApiKey: " + appConfig.apiKey + "\n";
     meta += "AppId: " + appConfig.appId + "\n";
@@ -566,9 +815,9 @@ function sendHtmlResponse(response, text, statusCode) {
 }
 
 function findClientConfig(apiKey) {
-    for (i = 0; i < clientsData.length; i++) {
-        if (clientsData[i]["apiKey"] == apiKey)
-            return clientsData[i];
+    for (i = 0; i < clientsDataArr.length; i++) {
+        if (clientsDataArr[i]["apiKey"] == apiKey)
+            return clientsDataArr[i];
     }
     return null;
 }
