@@ -13,6 +13,8 @@ var mkdirp = require('mkdirp');
 var async = require('async');
 var archiver = require('archiver');
 var mongoose = require('mongoose');
+var unzip = require('unzip');
+var rimraf = require('rimraf');
 
 
 var server = http.createServer(function(req, res) {
@@ -86,6 +88,12 @@ if (!String.prototype.format) {
             ;
         });
     };
+}
+
+function logError(message, err) {
+    if (err) {
+        console.error(message, err);
+    }
 }
 
 function makeFullPath(configPath) {
@@ -176,10 +184,14 @@ function parseClientMeta(metaStr) {
     return metaData;
 }
 
-function printCrashDumpTable() {
+function printCrashDumpTable(callback) {
     CrashDump.find().exec(function (err, dumps) {
-        if (err) return console.error(err);
+        if (err) {
+            console.error(err);
+            return callback && callback(err);
+        }
         console.log("Found dumps: " + dumps);
+        callback && callback(null);
     });
 }
 
@@ -187,76 +199,103 @@ function cleanCrashDumpTable(callback) {
     CrashDump.remove(function(err) {
         if (err) {
             console.error("::cleanCrashDumpsTable Failed to clean table: " + err);
-            return callback(err);
+            return callback && callback(err);
         }
         console.log("::cleanCrashDumpsTable CrashDump table cleaned");
-        callback(null);
+        callback && callback(null);
     });
 }
 
-// TODO Implement callback
+function saveDumpFileToDb(dumpsPath, dumpFileName, callback) {
+    var dumpFilePath = dumpsPath + "/" + dumpFileName;
+    var stats = fs.statSync(dumpFilePath);
+
+    var dumpEntry = new CrashDump();
+    dumpEntry.uploadDate = stats.mtime;
+    dumpEntry.dumpFileName = dumpFileName;
+    dumpEntry.clientId = clientId;
+    dumpEntry.appId = "#none";
+    dumpEntry.appVersion = "#none";
+    dumpEntry.meta = "#none";
+    
+    var metaFileName = dumpFileName + ".meta";
+    var metaFilePath = dumpsPath + "/" + metaFileName;
+    var metaObject = null;
+
+    if (fs.existsSync(metaFilePath)) {
+        console.log("::saveDumpFileToDb Dump file META: " + metaFileName);
+
+        dumpEntry.metaFileName = metaFileName;
+
+        metaObject = parseClientMeta(fs.readFileSync(metaFilePath, 'utf8'));
+        // console.dir(metaObject);
+    }
+
+    if (metaObject) {
+        dumpEntry.appId = metaObject["AppId"];
+        dumpEntry.appVersion = metaObject["AppVersion"];
+        delete metaObject["AppId"];
+        delete metaObject["AppVersion"];
+        delete metaObject["ApiKey"];                
+        // console.log("::saveDumpFileToDb Entry META object: ");
+        // console.dir(metaObject);
+        dumpEntry.meta = util.inspect(metaObject);
+    }
+
+    dumpEntry.save(function (err) {
+        if (err) {
+            console.error("::saveDumpFileToDb Failed to save CrashDump entry, error: " + err);
+            return callback && callback(err);
+        }
+        console.log("::saveDumpFileToDb CrashDump entry saved");
+        callback && callback(null);
+    });
+}
+
 function populateCrashDumpTable(callback) {
+    var dirsPending = clientsDataArr.length;
+    var filesPending = 0;
+
     clientsDataArr.forEach(function(clientData) {
         var clientId = clientData["description"];
         var dumpsPath = clientDumpTargetPath + "/" + clientId;
 
-        if (!fs.existsSync(dumpsPath))
+        if (!fs.existsSync(dumpsPath)) {
+            if (!--dirsPending && !filesPending && callback) {
+                callback(null);
+            }
             return;
+        }
 
         console.log("::addCrashDumpsToDb Searching dumps in: " + clientId);
 
         var dumpFiles = fs.readdirSync(dumpsPath);
-        var dumpFilesPending = dumpFiles.length;
+        filesPending += dumpFiles.length;
 
         dumpFiles.forEach(function(dumpFileName) {
             if (dumpFileName.startsWith(".") || dumpFileName.endsWith(".meta")) {
                 console.log("::addCrashDumpsToDb Skipping file: " + dumpFileName);
+
+                if (!dirsPending && !--filesPending && callback) {
+                    callback(null);
+                }
                 return;
             }
 
             console.log("::addCrashDumpsToDb Found dump file: " + dumpFileName);
-
-            var dumpFilePath = dumpsPath + "/" + dumpFileName;
-            var stats = fs.statSync(dumpFilePath);
-
-            var dumpEntry = new CrashDump();
-            dumpEntry.uploadDate = stats.mtime;
-            dumpEntry.dumpFileName = dumpFileName;
-            dumpEntry.clientId = clientId;
-            dumpEntry.appId = "#none";
-            dumpEntry.appVersion = "#none";
-            dumpEntry.meta = "#none";
             
-            var metaFileName = dumpFileName + ".meta";
-            var metaFilePath = dumpsPath + "/" + metaFileName;
-            var metaObject = null;
+            saveDumpFileToDb(dumpsPath, dumpFileName, function(err) {
+                if (err) {
+                    console.error("::populateCrashDumpTable Failed to save dump file, error: " + err);
+                }
 
-            if (fs.existsSync(metaFilePath)) {
-                console.log("::addCrashDumpsToDb Dump file META: " + metaFileName);
-
-                dumpEntry.metaFileName = metaFileName;
-
-                metaObject = parseClientMeta(fs.readFileSync(metaFilePath, 'utf8'));
-                // console.dir(metaObject);
-            }
-
-            if (metaObject) {
-                dumpEntry.appId = metaObject["AppId"];
-                dumpEntry.appVersion = metaObject["AppVersion"];
-                delete metaObject["AppId"];
-                delete metaObject["AppVersion"];
-                delete metaObject["ApiKey"];                
-                // console.log("::addCrashDumpsToDb Entry META object: ");
-                // console.dir(metaObject);
-                dumpEntry.meta = util.inspect(metaObject);
-            }
-
-            dumpEntry.save(function (err) {
-                if (err) 
-                    return console.error("::addCrashDumpsToDb Failed to save CrashDump entry, error: " + err);
-                console.log("::addCrashDumpsToDb CrashDump entry saved");
+                if (!dirsPending && !--filesPending && callback) {
+                    callback(null);
+                }
             });
         });
+
+        --dirsPending;
     });
 }
 
@@ -370,12 +409,78 @@ function createIncomingForm(uploadDir) {
 }
 
 /*
+ * Replaces Zip file with unzipped entry file
+ */
+function extractZippedFile(zipFilePath, callback) {
+    var extractDirPath = zipFilePath + "_unzip";
+
+    fs.mkdir(extractDirPath, function(err) {
+        if (err) return callback && callback(err);
+
+        var extract = unzip.Extract({ path: extractDirPath });
+        extract.on('error', function(err) {
+            console.error("::extractZippedFile Failed to extract ZIP file");
+
+            rimraf(extractDirPath, function(err2) {
+                if (err2) {
+                    console.error("::extractZippedFile Failed to delete temp unzip folder: " + err2);
+                }
+                callback && callback(err);
+            });
+        });
+        extract.on('close', function() {
+            console.log("::extractZippedFile ZIP file extracted to temp: " + extractDirPath);
+
+            fs.readdir(extractDirPath, function(err, files) {
+                if (err) {
+                    rimraf(extractDirPath, logError.bind('Rimraf error: '));
+                    return callback && callback(err);
+                }
+
+                if (files.length != 1) {
+                    rimraf(extractDirPath, logError.bind('Rimraf error: '));
+                    return callback && callback("Expected 1 extracted file but found: " + files.length);
+                }
+
+                var extractedFilePath = extractDirPath + "/" + files[0];
+                // Replace Zip file
+                fs.rename(extractedFilePath, zipFilePath, function(err) {
+                    rimraf(extractDirPath, logError.bind('Rimraf error: '));
+                    callback && callback(err);
+                });
+            });
+        });
+        fs.createReadStream(zipFilePath).pipe(extract);
+    });
+}
+
+/*
+ * Zip file detection
+ */
+function checkIsZipFile(filePath, callback) {
+    var fileStream = fs.createReadStream(filePath);
+
+    fileStream.on('readable', function() {
+        // 0x50 0x4B 0x03 0x04
+        var magicBytes = fileStream.read(4);
+        // console.log("::checkIsZipFile Magic: " + magicBytes.toString('hex'));
+
+        var isZipFile = magicBytes && magicBytes.length == 4 && 
+            magicBytes[0] == 0x50 && magicBytes[1] == 0x4B &&
+            magicBytes[2] == 0x03 && magicBytes[3] == 0x04;
+        callback && callback(null, isZipFile);
+    });
+    fileStream.on('error', function(err) {
+        callback && callback(err, false);
+    });
+}
+
+// TODO Add database
+/*
  * Handle file upload
  */
 function uploadClientLib(request, response) {
     // if (request.method.toLowerCase() == 'post')
-
-    var uploadTargetPath = clientLibTargetPath;
 
     var form = createIncomingForm(clientLibTempPath);
 
@@ -401,37 +506,72 @@ function uploadClientLib(request, response) {
             return;
         }
 
-        // Write META
         var file = files['upload-file'];
-        var tmpFileName = getFileNameWithoutExt(file.path);
-
         var metaData = getClientMeta(fields, appConfig, appVersion);
-        var metaFilePath = uploadTargetPath + "/" + file.name + "." + tmpFileName + ".meta";
 
-        fs.writeFile(metaFilePath, metaData, function (err2) {
-            if (err2) {
-                console.error("Saving client lib META error: " + err2);
+        var errorResponse = function(err) {
+            console.error("::uploadClientLib Failed with error: " + err);
+            sendTextResponse(response, "Operation: FAILED", 500);
+        }
+
+        checkIsZipFile(file.path, function(err, isZipFile) {
+            if (err) return errorResponse(err);
+
+            if (isZipFile) {
+                console.log("::uploadClientLib Uploaded file is Zip, extract");
+                
+                if (file.name.endsWith(".zip"))
+                    file.name = file.name.substring(0, file.name.length-4);
+
+                extractZippedFile(file.path, function(err) {
+                    if (err) return errorResponse(err);
+                    console.log("::uploadClientLib Zip file extracted");
+
+                    handleUploadedLib(file, metaData, function(err) {
+                        if (err) return errorResponse(err);
+                        sendTextResponse(response, "Operation: OK", 200);
+                    });
+                });
             } else {
-                console.log('Client lib META saved');
+                handleUploadedLib(file, metaData, function(err) {
+                    if (err) return errorResponse(err);
+                    sendTextResponse(response, "Operation: OK", 200);
+                });
+            }
+        });
+    });
+}
+
+function handleUploadedLib(file, metaData, callback) {
+    var uploadTargetPath = clientLibTargetPath;
+
+    var tmpFileName = getFileNameWithoutExt(file.path);
+    var metaFilePath = uploadTargetPath + "/" + file.name + "." + tmpFileName + ".meta";
+
+    fs.writeFile(metaFilePath, metaData, function (err) {
+        if (err) {
+            console.error("::handleUploadedLib Saving client lib META error: " + err);
+            return callback && callback(err);
+        }
+
+        console.log('::handleUploadedLib Client lib META saved');
+
+        // TODO Run in parallel and wait for the operations to complete before 'processClientLib' call
+        var newFilePath = uploadTargetPath + "/" + file.name + "." + tmpFileName;
+        console.log("::handleUploadedLib File target path " + newFilePath);
+
+        fs.rename(file.path, newFilePath, function(err2) {  
+            if (err2) {
+                console.error("::handleUploadedLib File rename error: " + err2);
+                return callback && callback(err2);
             }
 
-            // TODO Run in parallel and wait for the operations to complete before 'processClientLib' call
-            // Write file
-            var newFilePath = uploadTargetPath + "/" + file.name + "." + tmpFileName;
-            console.log("   File target path " + newFilePath);
+            // TODO Uncomment
+            // processClientLib(newFilePath, metaFilePath);
+            console.log("::handleUploadedLib Uploaded tmp file renamed");
 
-            fs.rename(file.path, newFilePath, function(err2) {  
-                if (err2) {
-                    console.error("File rename error: " + err2);
-                } else {
-                    processClientLib(newFilePath, metaFilePath);
-                    console.log("Uploaded tmp file renamed");
-                }
-            });
+            callback && callback(null);
         });
-
-        // Render response
-        sendTextResponse(response, "Operation: OK", 200);
     });
 }
 
@@ -517,6 +657,7 @@ function processClientLib(libPath, metaFilePath) {
                             }
                         });
 
+                        // TODO Use rename instead
                         // Error handling should be added
                         fs.createReadStream(metaFilePath).pipe(fs.createWriteStream(metaFileTargetPath));
                     }
