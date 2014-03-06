@@ -167,6 +167,15 @@ function parseClientMeta(metaStr) {
     if (!metaStr)
         return null;
 
+    try {
+        var parsed = JSON.parse(metaStr);
+
+        if (parsed)
+            return parsed;
+    } catch(e) {
+        console.warn("::parseClientMeta Couldn't parse str with JSON.parse");
+    }
+
     var metaData = new Object();
     var metaLines = metaStr.split("\n");
 
@@ -548,7 +557,9 @@ function handleUploadedLib(file, metaData, callback) {
     var tmpFileName = getFileNameWithoutExt(file.path);
     var metaFilePath = uploadTargetPath + "/" + file.name + "." + tmpFileName + ".meta";
 
-    fs.writeFile(metaFilePath, metaData, function (err) {
+    console.log("::handleUploadedLib MetaData str: " + JSON.stringify(metaData));
+
+    fs.writeFile(metaFilePath, JSON.stringify(metaData), function (err) {
         if (err) {
             console.error("::handleUploadedLib Saving client lib META error: " + err);
             return callback && callback(err);
@@ -709,7 +720,7 @@ function uploadClientDump(request, response) {
         var metaData = getClientMeta(fields, appConfig, appVersion);
         var metaFilePath = appSubdirPath + "/" + file.name + "." + tmpFileName + ".meta";
 
-        fs.writeFile(metaFilePath, metaData, function (err2) {
+        fs.writeFile(metaFilePath, JSON.stringify(metaData), function (err2) {
             if (err2) {
                 console.error("Saving client dump META error: " + err2);
             } else {
@@ -746,12 +757,14 @@ function sendBackSymbolsAndCrashes(request, response) {
     addDirToArchive(archive, clientDumpTargetPath, function(err) {
         if (err) {
             console.error("::sendBackSymbolsAndCrashes Zipping crash dumps error: " + err);
+            sendTextResponse(response, "Operation: FAILED", 500);
             return;
         }
 
         addDirToArchive(archive, symbolsFolderPath, function(err2) {
             if (err2) {
                 console.error("::sendBackSymbolsAndCrashes Zipping symbols error: " + err2);
+                sendTextResponse(response, "Operation: FAILED", 500);
                 return;
             }
 
@@ -768,10 +781,7 @@ function addDirToArchive(archive, dirPath, callback) {
     var dirName = path.basename(dirPath);
 
     listFilesRecursively(dirPath, dirName + "/", function(err, files) {
-        if (err) {
-            callback(err);
-            return;
-        }
+        if (err) return callback && callback(err);
 
         function zipFile(fileRelPath, zipCallback) {
             // console.log("::addDirToArchive Zipping file: " + fileRelPath);
@@ -779,15 +789,12 @@ function addDirToArchive(archive, dirPath, callback) {
             var fileAbsPath = parentDirPath + "/" + fileRelPath;
             archive.append(fs.createReadStream(fileAbsPath), { name: fileRelPath });
 
-            zipCallback(null);
+            zipCallback && zipCallback(null);
         }
 
         async.eachSeries(files, zipFile, function(err2) {
-            if (err2) {
-                callback(err2);
-                return;
-            }
-            callback(null);
+            if (err2) return callback && callback(err2);
+            callback && callback(null);
         });
     });
 }
@@ -800,7 +807,10 @@ function showDumpsList(request, response) {
 
     CrashDump.find().select('_id uploadDate appId appVersion')
     .exec(function (err, dumpsArr) {
-        if (err) return console.error(err); // TODO send response
+        if (err) {
+            sendTextResponse(response, "Operation: FAILED", 500);
+            return console.error(err);
+        }
         // console.log("Found dumps: " + dumpsArr);
 
         var body = '<h1>Crash dumps:</h1>';
@@ -838,8 +848,12 @@ function showCrashReport(request, response) {
     console.log("::showCrashReport Dump id: " + dumpId);
 
     CrashDump.findOne({ "_id": dumpId}).select('clientId dumpFileName')
-    .exec(function (err, dumpEntry) {
-        if (err) return console.error(err); // TODO send response
+        .exec(function (err, dumpEntry) 
+    {
+        if (err) {
+            sendTextResponse(response, "Operation: FAILED", 500);
+            return console.error(err);
+        }
         // console.log("::showCrashReport Found dump: " + dumpEntry);
 
         var dumpFilePath = clientDumpTargetPath + "/" + dumpEntry.clientId +"/" + dumpEntry.dumpFileName;
@@ -853,7 +867,7 @@ function showCrashReport(request, response) {
             if (err) {
                 console.error("::showCrashReport symbolication exec error: " + err);
                 console.error("::showCrashReport symbolication exec stderr: " + stderr);
-                // TODO send error response
+                sendTextResponse(response, "Operation: FAILED", 500);
                 return;
             }
 
@@ -873,8 +887,12 @@ function showDumpMeta(request, response) {
     console.log("::showDumpMeta Dump id: " + dumpId);
 
     CrashDump.findOne({ "_id": dumpId}).select('meta')
-    .exec(function (err, dumpEntry) {
-        if (err) return console.error(err); // TODO send response
+        .exec(function (err, dumpEntry) 
+    {
+        if (err) {
+            sendTextResponse(response, "Operation: FAILED", 500);
+            return console.error(err);
+        }
         // console.log("::showDumpMeta Found dump: " + dumpEntry);
 
         // var metaFilePath = clientDumpTargetPath + "/" + dumpEntry.clientId +"/" + dumpEntry.metaFileName;
@@ -888,27 +906,27 @@ function listFilesRecursively(dirPath, subdirPath, doneCallback) {
     var files = [];
 
     fs.readdir(dirPath, function(err, entryArr) {
-        if (err) {
-            doneCallback(err, files);
-            return;
-        }
+        if (err) return doneCallback && doneCallback(err, files); 
 
         var pending = entryArr.length;
         if (!pending) 
-            return doneCallback(null, files);
+            return doneCallback && doneCallback(null, files);
 
         entryArr.forEach(function(entryName) {
             var entryPath = dirPath + '/' + entryName;
 
             fs.stat(entryPath, function(err, stat) {
+                if (err) return doneCallback && doneCallback(err, files);
+
                 if (stat && stat.isDirectory()) {
                     listFilesRecursively(entryPath, subdirPath + entryName + "/", function(err, res) {
                         files = files.concat(res);
-                        if (!--pending) doneCallback(null, files);
+                        if (err) doneCallback && doneCallback(err, files);
+                        if (!--pending) doneCallback && doneCallback(null, files);
                     });
                 } else if (stat && stat.isFile()) {
                     files.push(subdirPath + entryName);
-                    if (!--pending) doneCallback(null, files);
+                    if (!--pending) doneCallback && doneCallback(null, files);
                 } else {
                     --pending;
                 }
@@ -917,23 +935,23 @@ function listFilesRecursively(dirPath, subdirPath, doneCallback) {
     });
 }
 
-// TODO Use JSON
 function getClientMeta(fields, appConfig, appVersion) {
-    var meta = "ApiKey: " + appConfig.apiKey + "\n";
-    meta += "AppId: " + appConfig.appId + "\n";
-    meta += "AppVersion: " + appVersion + "\n";
+    var meta = new Object();
+    meta["ApiKey"] = appConfig.apiKey;
+    meta["AppId"] = appConfig.appId;
+    meta["AppVersion"] = appVersion;
 
     var date = new Date();
-    meta += "CreateDateTime: " + date.toISOString() + "\n";
+    meta["CreateDateTime"] = date.toISOString();
 
-    meta += "ID: " + fields['meta.ID'] + "\n";
-    meta += "MANUFACTURER: " + fields['meta.MANUFACTURER'] + "\n";
-    meta += "MODEL: " + fields['meta.MODEL'] + "\n";
-    meta += "PRODUCT: " + fields['meta.PRODUCT'] + "\n";
-    meta += "VERSION.CODENAME: " + fields['meta.VERSION.CODENAME'] + "\n";
-    meta += "VERSION.INCREMENTAL: " + fields['meta.VERSION.INCREMENTAL'] + "\n";
-    meta += "VERSION.RELEASE: " + fields['meta.VERSION.RELEASE'] + "\n";
-    meta += "VERSION.SDK_INT: " + fields['meta.VERSION.SDK_INT'];
+    meta["ID"] = fields['meta.ID'];
+    meta["MANUFACTURER"] = fields['meta.MANUFACTURER'];
+    meta["MODEL"] = fields['meta.MODEL'];
+    meta["PRODUCT"] = fields['meta.PRODUCT'];
+    meta["VERSION.CODENAME"] = fields['meta.VERSION.CODENAME'];
+    meta["VERSION.INCREMENTAL"] = fields['meta.VERSION.INCREMENTAL'];
+    meta["VERSION.RELEASE"] = fields['meta.VERSION.RELEASE'];
+    meta["VERSION.SDK_INT"] = fields['meta.VERSION.SDK_INT'];
     return meta;
 }
 
