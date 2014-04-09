@@ -47,6 +47,8 @@ var server = http.createServer(function(req, res) {
     }
 });
 
+// TODO Check async.waterfall
+
 // Configs
 var configFilePath = __dirname + '/config.json';
 var configData;
@@ -225,7 +227,7 @@ function saveDumpFileToDb(dumpsPath, dumpFileName, callback) {
     dumpEntry.clientId = clientId;
     dumpEntry.appId = "#none";
     dumpEntry.appVersion = "#none";
-    dumpEntry.meta = "#none";
+    dumpEntry.meta = {};
     
     var metaFileName = dumpFileName + ".meta";
     var metaFilePath = dumpsPath + "/" + metaFileName;
@@ -248,7 +250,7 @@ function saveDumpFileToDb(dumpsPath, dumpFileName, callback) {
         delete metaObject["ApiKey"];                
         // console.log("::saveDumpFileToDb Entry META object: ");
         // console.dir(metaObject);
-        dumpEntry.meta = util.inspect(metaObject);
+        dumpEntry.meta = metaObject;
     }
 
     dumpEntry.save(function (err) {
@@ -317,7 +319,7 @@ function initDbModels() {
         clientId: String,
         appId: String,
         appVersion: String,
-        meta: String
+        meta: mongoose.Schema.Types.Mixed
     });
     CrashDump = mongoose.model('CrashDump', crashDumpSchema);    
 }
@@ -577,8 +579,7 @@ function handleUploadedLib(file, metaData, callback) {
                 return callback && callback(err2);
             }
 
-            // TODO Uncomment
-            // processClientLib(newFilePath, metaFilePath);
+            processClientLib(newFilePath, metaFilePath);
             console.log("::handleUploadedLib Uploaded tmp file renamed");
 
             callback && callback(null);
@@ -689,7 +690,7 @@ function uploadClientDump(request, response) {
     var form = createIncomingForm(clientDumpTempPath);
 
     form.parse(request, function(err, fields, files) {
-        console.log("Form[client dump] on Parse");
+        console.log("::uploadClientDump Form[client dump] on Parse");
 
         var apiKey = fields['apiKey'];
         var appId = fields['appId'];
@@ -710,6 +711,11 @@ function uploadClientDump(request, response) {
             return;
         }
 
+        var errorResponse = function(err) {
+            console.error("::uploadClientDump Failed with error: " + err);
+            sendTextResponse(response, "Operation: FAILED", 500);
+        }
+
         // Write META
         var file = files['upload-file'];
         var tmpFileName = getFileNameWithoutExt(file.path);
@@ -717,31 +723,35 @@ function uploadClientDump(request, response) {
         var appSubdirPath = uploadTargetPath + "/" + appConfig.description;
         checkAndCreateDir(appSubdirPath);
 
+        var dumpFileName = file.name + "." + tmpFileName;
+        var metaFilePath = appSubdirPath + "/" + dumpFileName + ".meta";
+
         var metaData = getClientMeta(fields, appConfig, appVersion);
-        var metaFilePath = appSubdirPath + "/" + file.name + "." + tmpFileName + ".meta";
 
         fs.writeFile(metaFilePath, JSON.stringify(metaData), function (err2) {
-            if (err2) {
-                console.error("Saving client dump META error: " + err2);
-            } else {
-                console.log('Client dump META saved');
-            }
+            if (err2) return errorResponse(err2);
+
+            console.log("::uploadClientDump Client dump META saved");
+
+            // Write dump file
+            var targetFilePath = appSubdirPath + "/" + dumpFileName;
+            console.log("   File target path " + newFilePath);
+
+            fs.rename(file.path, targetFilePath, function(err2) {  
+                if (err2) return errorResponse(err2);
+
+                console.log("::uploadClientDump Uploaded tmp file renamed");
+
+                saveDumpFileToDb(appSubdirPath, dumpFileName, function(err2) {
+                    if (err2) return errorResponse(err2);
+
+                    console.log("::uploadClientDump Client dump saved to DB");
+
+                    // Render response
+                    sendTextResponse(response, "Operation: OK", 200);
+                });
+            });
         });
-
-        // Write file
-        var newFilePath = appSubdirPath + "/" + file.name + "." + tmpFileName;
-        console.log("   File target path " + newFilePath);
-
-        fs.rename(file.path, newFilePath, function(err2) {  
-            if (err2) {
-                console.error("File rename error: " + err2);
-            } else {
-                console.log("Uploaded tmp file renamed");
-            }
-        });
-
-        // Render response
-        sendTextResponse(response, "Operation: OK", 200);
     });
 }
 
@@ -898,7 +908,7 @@ function showDumpMeta(request, response) {
         // var metaFilePath = clientDumpTargetPath + "/" + dumpEntry.clientId +"/" + dumpEntry.metaFileName;
         // console.log("::showDumpMeta Dump meta file path: " + metaFilePath);
 
-        sendTextResponse(response, dumpEntry.meta, 200);
+        sendTextResponse(response, util.inspect(dumpEntry.meta), 200);
     });
 }
 
