@@ -217,7 +217,7 @@ function cleanCrashDumpTable(callback) {
     });
 }
 
-function saveDumpFileToDb(dumpsPath, dumpFileName, callback) {
+function saveDumpFileToDb(dumpsPath, dumpFileName, clientId, callback) {
     var dumpFilePath = dumpsPath + "/" + dumpFileName;
     var stats = fs.statSync(dumpFilePath);
 
@@ -295,7 +295,7 @@ function populateCrashDumpTable(callback) {
 
             console.log("::addCrashDumpsToDb Found dump file: " + dumpFileName);
             
-            saveDumpFileToDb(dumpsPath, dumpFileName, function(err) {
+            saveDumpFileToDb(dumpsPath, dumpFileName, clientId, function(err) {
                 if (err) {
                     console.error("::populateCrashDumpTable Failed to save dump file, error: " + err);
                 }
@@ -742,7 +742,7 @@ function uploadClientDump(request, response) {
 
                 console.log("::uploadClientDump Uploaded tmp file renamed");
 
-                saveDumpFileToDb(appSubdirPath, dumpFileName, function(err2) {
+                saveDumpFileToDb(appSubdirPath, dumpFileName, appConfig.description, function(err2) {
                     if (err2) return errorResponse(err2);
 
                     console.log("::uploadClientDump Client dump saved to DB");
