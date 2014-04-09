@@ -227,7 +227,7 @@ function saveDumpFileToDb(dumpsPath, dumpFileName, clientId, callback) {
     dumpEntry.clientId = clientId;
     dumpEntry.appId = "#none";
     dumpEntry.appVersion = "#none";
-    dumpEntry.meta = {};
+    dumpEntry.meta = "#none";
     
     var metaFileName = dumpFileName + ".meta";
     var metaFilePath = dumpsPath + "/" + metaFileName;
@@ -250,7 +250,7 @@ function saveDumpFileToDb(dumpsPath, dumpFileName, clientId, callback) {
         delete metaObject["ApiKey"];                
         // console.log("::saveDumpFileToDb Entry META object: ");
         // console.dir(metaObject);
-        dumpEntry.meta = metaObject;
+        dumpEntry.meta = util.inspect(metaObject);
     }
 
     dumpEntry.save(function (err) {
@@ -319,7 +319,7 @@ function initDbModels() {
         clientId: String,
         appId: String,
         appVersion: String,
-        meta: mongoose.Schema.Types.Mixed
+        meta: String //mongoose.Schema.Types.Mixed
     });
     CrashDump = mongoose.model('CrashDump', crashDumpSchema);    
 }
@@ -908,7 +908,7 @@ function showDumpMeta(request, response) {
         // var metaFilePath = clientDumpTargetPath + "/" + dumpEntry.clientId +"/" + dumpEntry.metaFileName;
         // console.log("::showDumpMeta Dump meta file path: " + metaFilePath);
 
-        sendTextResponse(response, util.inspect(dumpEntry.meta), 200);
+        sendTextResponse(response, dumpEntry.meta, 200);
     });
 }
 
