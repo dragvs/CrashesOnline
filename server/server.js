@@ -16,6 +16,9 @@ var mongoose = require('mongoose');
 var unzip = require('unzip');
 var rimraf = require('rimraf');
 
+// debug flags
+var cleanupCrashDumps = false;
+var populateCrashDumps = false;
 
 var server = http.createServer(function(req, res) {
     // Simple path-based request dispatcher
@@ -346,9 +349,11 @@ function main() {
         if (err) return console.error("Init database error: " + err);
 
         // printCrashDumpTable(function(err) {});
-        // cleanCrashDumpTable(function(err) {});
-        // populateCrashDumpTable(function(err) {
-        // });
+        if (cleanupDumpsCollection)
+            cleanCrashDumpTable(function(err) {});
+        if (populateDumpsCollection)
+            populateCrashDumpTable(function(err) {
+            });
 
         // Server would listen on port 80
         var httpServerPort = configData["http_server_port"];
@@ -405,13 +410,13 @@ function createIncomingForm(uploadDir) {
         console.log("Form on File begin: " + file.name);
     });
 
-    form.on('progress', function(bytesReceived, bytesExpected) {
-        var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
-        var receivedKb = (bytesReceived / 1024).toFixed(1);
-        var expectedKb = (bytesExpected / 1024).toFixed(1);
+    // form.on('progress', function(bytesReceived, bytesExpected) {
+    //     var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
+    //     var receivedKb = (bytesReceived / 1024).toFixed(1);
+    //     var expectedKb = (bytesExpected / 1024).toFixed(1);
      
-        console.log("Form Uploading " + receivedKb + " Kb of " + expectedKb + " Kb (" + progress + "%)");
-    });
+    //     console.log("Form Uploading " + receivedKb + " Kb of " + expectedKb + " Kb (" + progress + "%)");
+    // });
 
     form.on('error', function(err) {
         console.error("Form error: " + err);
@@ -493,7 +498,30 @@ function checkIsZipFile(filePath, callback) {
 function uploadClientLib(request, response) {
     // if (request.method.toLowerCase() == 'post')
 
+    var nextProgressToReport = 0;
+    var progressReportStep = 0;
+
     var form = createIncomingForm(clientLibTempPath);
+    form.on('progress', function(bytesReceived, bytesExpected) {
+        var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
+        var kbytesReceived = bytesReceived / 1024;
+        var kbytesExpected = bytesExpected / 1024;
+
+        if (progressReportStep == 0) {
+            if (kbytesExpected > 0) {
+                progressReportStep = kbytesExpected / 10;
+            } else {
+                progressReportStep = 200;
+            }
+        }
+
+        if (kbytesReceived > nextProgressToReport) {
+            nextProgressToReport = ((kbytesReceived/progressReportStep) + 1) * progressReportStep;
+
+            console.log("Form Uploading " + kbytesReceived.toFixed(1) + 
+                " Kb of " + kbytesExpected.toFixed(1) + " Kb (" + progress + "%)");
+        }
+    });
 
     form.parse(request, function(err, fields, files) {
         console.log("Form[client lib] on Parse");
@@ -687,7 +715,31 @@ function uploadClientDump(request, response) {
 
     var uploadTargetPath = clientDumpTargetPath;
 
+
+    var nextProgressToReport = 0;
+    var progressReportStep = 0;
+
     var form = createIncomingForm(clientDumpTempPath);
+    form.on('progress', function(bytesReceived, bytesExpected) {
+        var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
+        var kbytesReceived = bytesReceived / 1024;
+        var kbytesExpected = bytesExpected / 1024;
+
+        if (progressReportStep == 0) {
+            if (kbytesExpected > 0) {
+                progressReportStep = kbytesExpected / 10;
+            } else {
+                progressReportStep = 50;
+            }
+        }
+
+        if (kbytesReceived > nextProgressToReport) {
+            nextProgressToReport = ((kbytesReceived/progressReportStep) + 1) * progressReportStep;
+
+            console.log("Form Uploading " + kbytesReceived.toFixed(1) + 
+                " Kb of " + kbytesExpected.toFixed(1) + " Kb (" + progress + "%)");
+        }
+    });
 
     form.parse(request, function(err, fields, files) {
         console.log("::uploadClientDump Form[client dump] on Parse");
@@ -735,7 +787,7 @@ function uploadClientDump(request, response) {
 
             // Write dump file
             var targetFilePath = appSubdirPath + "/" + dumpFileName;
-            console.log("   File target path " + newFilePath);
+            console.log("   File target path " + targetFilePath);
 
             fs.rename(file.path, targetFilePath, function(err2) {  
                 if (err2) return errorResponse(err2);
