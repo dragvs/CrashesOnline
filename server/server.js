@@ -349,11 +349,10 @@ function main() {
         if (err) return console.error("Init database error: " + err);
 
         // printCrashDumpTable(function(err) {});
-        if (cleanupDumpsCollection)
+        if (cleanupCrashDumps)
             cleanCrashDumpTable(function(err) {});
-        if (populateDumpsCollection)
-            populateCrashDumpTable(function(err) {
-            });
+        if (populateCrashDumps)
+            populateCrashDumpTable(function(err) {});
 
         // Server would listen on port 80
         var httpServerPort = configData["http_server_port"];
