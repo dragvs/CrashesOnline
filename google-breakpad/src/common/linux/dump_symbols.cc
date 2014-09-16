@@ -52,6 +52,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/arm_ex_reader.h"
 #include "common/dwarf/bytereader-inl.h"
 #include "common/dwarf/dwarf2diehandler.h"
 #include "common/dwarf_cfi_to_module.h"
@@ -354,6 +355,22 @@ bool LoadDwarfCFI(const string& dwarf_filename,
   return true;
 }
 
+template<typename ElfClass>
+bool LoadARMexidx(const typename ElfClass::Ehdr* elf_header,
+                  const typename ElfClass::Shdr* section,
+                  uint32_t loading_addr,
+                  Module* module) {
+  const char *exidx = GetOffset<ElfClass, char>(elf_header, section->sh_offset);
+  size_t size = section->sh_size;
+  arm_ex_to_module::ARMExToModule handler(module);
+  arm_ex_reader::ExceptionTableInfo
+    parser(exidx, size, &handler,
+           reinterpret_cast<const char*>(elf_header),
+           loading_addr);
+  parser.Start();
+  return true;
+}
+
 bool LoadELF(const string& obj_file, MmapWrapper* map_wrapper,
              void** elf_header) {
   int obj_fd = open(obj_file.c_str(), O_RDONLY);
@@ -639,6 +656,20 @@ bool LoadSymbols(const string& obj_file,
                                  got_section, text_section, big_endian, module);
       found_usable_info = found_usable_info || result;
     }
+  }
+
+  // ARM has special unwind tables that can be used.
+  const Shdr* arm_exidx_section =
+      FindElfSectionByName<ElfClass>(".ARM.exidx", SHT_ARM_EXIDX,
+                                     sections, names, names_end,
+                                     elf_header->e_shnum);
+  // Only load information from this section if there isn't a .debug_info
+  // section.
+  if (/*!found_debug_info_section &&*/ arm_exidx_section) {
+    info->LoadedSection(".ARM.exidx");
+    bool result = LoadARMexidx<ElfClass>(elf_header, arm_exidx_section,
+                                         loading_addr, module);
+    found_usable_info = found_usable_info || result;
   }
 
   if (!found_debug_info_section) {

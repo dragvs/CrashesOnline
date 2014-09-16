@@ -88,31 +88,31 @@ noinst_LIBRARIES += src/third_party/libdisasm/libdisasm.a
 endif
 
 if LINUX_HOST
-lib_LIBRARIES += src/client/linux/libbreakpad_client.a
-
-src_client_linux_libbreakpad_client_a_SOURCES = \
-	src/client/linux/crash_generation/crash_generation_client.cc \
-	src/client/linux/crash_generation/crash_generation_server.cc \
-	src/client/linux/handler/exception_handler.cc \
-	src/client/linux/handler/minidump_descriptor.cc \
-	src/client/linux/log/log.cc \
-	src/client/linux/minidump_writer/linux_dumper.cc \
-	src/client/linux/minidump_writer/linux_ptrace_dumper.cc \
-	src/client/linux/minidump_writer/minidump_writer.cc \
-	src/client/minidump_file_writer.cc \
-	src/common/convert_UTF.c \
-	src/common/md5.cc \
-	src/common/string_conversion.cc \
-	src/common/linux/elfutils.cc \
-	src/common/linux/file_id.cc \
-	src/common/linux/guid_creator.cc \
-	src/common/linux/linux_libc_support.cc \
-	src/common/linux/memory_mapped_file.cc \
-	src/common/linux/safe_readlink.cc
-if ANDROID_HOST
-src_client_linux_libbreakpad_client_a_SOURCES += \
-	src/common/android/breakpad_getcontext.S
-endif
+#lib_LIBRARIES += src/client/linux/libbreakpad_client.a
+#
+#src_client_linux_libbreakpad_client_a_SOURCES = \
+#	src/client/linux/crash_generation/crash_generation_client.cc \
+#	src/client/linux/crash_generation/crash_generation_server.cc \
+#	src/client/linux/handler/exception_handler.cc \
+#	src/client/linux/handler/minidump_descriptor.cc \
+#	src/client/linux/log/log.cc \
+#	src/client/linux/minidump_writer/linux_dumper.cc \
+#	src/client/linux/minidump_writer/linux_ptrace_dumper.cc \
+#	src/client/linux/minidump_writer/minidump_writer.cc \
+#	src/client/minidump_file_writer.cc \
+#	src/common/convert_UTF.c \
+#	src/common/md5.cc \
+#	src/common/string_conversion.cc \
+#	src/common/linux/elfutils.cc \
+#	src/common/linux/file_id.cc \
+#	src/common/linux/guid_creator.cc \
+#	src/common/linux/linux_libc_support.cc \
+#	src/common/linux/memory_mapped_file.cc \
+#	src/common/linux/safe_readlink.cc
+#if ANDROID_HOST
+#src_client_linux_libbreakpad_client_a_SOURCES += \
+#	src/common/android/breakpad_getcontext.S
+#endif
 endif LINUX_HOST
 
 if !DISABLE_PROCESSOR
@@ -258,12 +258,13 @@ bin_PROGRAMS += \
 endif !DISABLE_PROCESSOR
 
 if LINUX_HOST
-bin_PROGRAMS += \
-	src/client/linux/linux_dumper_unittest_helper
+#bin_PROGRAMS += \
+#	src/client/linux/linux_dumper_unittest_helper
+
+#	src/tools/linux/core2md/core2md
 
 if !DISABLE_TOOLS
 bin_PROGRAMS += \
-	src/tools/linux/core2md/core2md \
 	src/tools/linux/dump_syms/dump_syms \
 	src/tools/linux/md2core/minidump-2-core \
 	src/tools/linux/symupload/minidump_upload \
@@ -304,11 +305,11 @@ check_PROGRAMS += \
 endif
 
 if LINUX_HOST
-EXTRA_PROGRAMS = \
-	src/client/linux/linux_client_unittest_shlib
+#EXTRA_PROGRAMS = \
+#	src/client/linux/linux_client_unittest_shlib
 
-check_PROGRAMS += \
-	src/client/linux/linux_client_unittest
+#check_PROGRAMS += \
+#	src/client/linux/linux_client_unittest
 
 if !DISABLE_TOOLS
 check_PROGRAMS += \
@@ -345,108 +346,108 @@ LOG_DRIVER = $(top_srcdir)/autotools/test-driver
 endif
 
 if LINUX_HOST
-src_client_linux_linux_dumper_unittest_helper_SOURCES = \
-	src/client/linux/minidump_writer/linux_dumper_unittest_helper.cc
-src_client_linux_linux_dumper_unittest_helper_LDFLAGS=$(PTHREAD_CFLAGS)
-src_client_linux_linux_dumper_unittest_helper_CC=$(PTHREAD_CC)
-if ANDROID_HOST
-# On Android PTHREAD_CFLAGS is empty, and adding src/common/android/include
-# to the include path is necessary to build this program.
-src_client_linux_linux_dumper_unittest_helper_CXXFLAGS=$(AM_CXXFLAGS)
-else
-src_client_linux_linux_dumper_unittest_helper_CXXFLAGS=$(PTHREAD_CFLAGS)
-endif
+#src_client_linux_linux_dumper_unittest_helper_SOURCES = \
+#	src/client/linux/minidump_writer/linux_dumper_unittest_helper.cc
+#src_client_linux_linux_dumper_unittest_helper_LDFLAGS=$(PTHREAD_CFLAGS)
+#src_client_linux_linux_dumper_unittest_helper_CC=$(PTHREAD_CC)
+#if ANDROID_HOST
+## On Android PTHREAD_CFLAGS is empty, and adding src/common/android/include
+## to the include path is necessary to build this program.
+#src_client_linux_linux_dumper_unittest_helper_CXXFLAGS=$(AM_CXXFLAGS)
+#else
+#src_client_linux_linux_dumper_unittest_helper_CXXFLAGS=$(PTHREAD_CFLAGS)
+#endif
 
-src_client_linux_linux_client_unittest_shlib_SOURCES = \
-	src/client/linux/handler/exception_handler_unittest.cc \
-	src/client/linux/minidump_writer/directory_reader_unittest.cc \
-	src/client/linux/minidump_writer/cpu_set_unittest.cc \
-	src/client/linux/minidump_writer/line_reader_unittest.cc \
-	src/client/linux/minidump_writer/linux_core_dumper.cc \
-	src/client/linux/minidump_writer/linux_core_dumper_unittest.cc \
-	src/client/linux/minidump_writer/linux_ptrace_dumper_unittest.cc \
-	src/client/linux/minidump_writer/minidump_writer_unittest.cc \
-	src/client/linux/minidump_writer/minidump_writer_unittest_utils.cc \
-	src/client/linux/minidump_writer/proc_cpuinfo_reader_unittest.cc \
-	src/common/linux/elf_core_dump.cc \
-	src/common/linux/linux_libc_support_unittest.cc \
-	src/common/linux/tests/crash_generator.cc \
-	src/common/memory_unittest.cc \
-	src/common/tests/file_utils.cc \
-	src/testing/gtest/src/gtest-all.cc \
-	src/testing/gtest/src/gtest_main.cc \
-	src/testing/src/gmock-all.cc \
-	src/processor/basic_code_modules.cc \
-	src/processor/logging.cc \
-	src/processor/minidump.cc \
-	src/processor/pathname_stripper.cc
-if ANDROID_HOST
-src_client_linux_linux_client_unittest_shlib_SOURCES += \
-	src/common/android/breakpad_getcontext.S
-endif
+#src_client_linux_linux_client_unittest_shlib_SOURCES = \
+#	src/client/linux/handler/exception_handler_unittest.cc \
+#	src/client/linux/minidump_writer/directory_reader_unittest.cc \
+#	src/client/linux/minidump_writer/cpu_set_unittest.cc \
+#	src/client/linux/minidump_writer/line_reader_unittest.cc \
+#	src/client/linux/minidump_writer/linux_core_dumper.cc \
+#	src/client/linux/minidump_writer/linux_core_dumper_unittest.cc \
+#	src/client/linux/minidump_writer/linux_ptrace_dumper_unittest.cc \
+#	src/client/linux/minidump_writer/minidump_writer_unittest.cc \
+#	src/client/linux/minidump_writer/minidump_writer_unittest_utils.cc \
+#	src/client/linux/minidump_writer/proc_cpuinfo_reader_unittest.cc \
+#	src/common/linux/elf_core_dump.cc \
+#	src/common/linux/linux_libc_support_unittest.cc \
+#	src/common/linux/tests/crash_generator.cc \
+#	src/common/memory_unittest.cc \
+#	src/common/tests/file_utils.cc \
+#	src/testing/gtest/src/gtest-all.cc \
+#	src/testing/gtest/src/gtest_main.cc \
+#	src/testing/src/gmock-all.cc \
+#	src/processor/basic_code_modules.cc \
+#	src/processor/logging.cc \
+#	src/processor/minidump.cc \
+#	src/processor/pathname_stripper.cc
+#if ANDROID_HOST
+#src_client_linux_linux_client_unittest_shlib_SOURCES += \
+#	src/common/android/breakpad_getcontext.S
+#endif
 
-src_client_linux_linux_client_unittest_shlib_CPPFLAGS = \
-	-I$(top_srcdir)/src \
-	-I$(top_srcdir)/src/testing/include \
-	-I$(top_srcdir)/src/testing/gtest/include \
-	-I$(top_srcdir)/src/testing/gtest \
-	-I$(top_srcdir)/src/testing
-src_client_linux_linux_client_unittest_shlib_LDFLAGS = \
-	-shared \
-	-Wl,-h,linux_client_unittest_shlib
-src_client_linux_linux_client_unittest_shlib_LDADD = \
-	src/client/linux/handler/exception_handler.o \
-	src/client/linux/handler/minidump_descriptor.o \
-	src/client/linux/log/log.o \
-	src/client/linux/crash_generation/crash_generation_client.o \
-	src/client/linux/minidump_writer/linux_dumper.o \
-	src/client/linux/minidump_writer/linux_ptrace_dumper.o \
-	src/client/linux/minidump_writer/minidump_writer.o \
-	src/client/minidump_file_writer.o \
-	src/common/convert_UTF.o \
-	src/common/md5.o \
-	src/common/linux/elfutils.o \
-	src/common/linux/file_id.o \
-	src/common/linux/guid_creator.o \
-	src/common/linux/linux_libc_support.o \
-	src/common/linux/memory_mapped_file.o \
-	src/common/linux/safe_readlink.o \
-	src/common/string_conversion.o \
-	$(PTHREAD_CFLAGS) $(PTHREAD_LIBS)
-if ANDROID_HOST
-src_client_linux_linux_client_unittest_shlib_SOURCES += \
-	src/common/android/breakpad_getcontext_unittest.cc
-src_client_linux_linux_client_unittest_shlib_LDFLAGS += \
-	-llog -lm
-endif
+#src_client_linux_linux_client_unittest_shlib_CPPFLAGS = \
+#	-I$(top_srcdir)/src \
+#	-I$(top_srcdir)/src/testing/include \
+#	-I$(top_srcdir)/src/testing/gtest/include \
+#	-I$(top_srcdir)/src/testing/gtest \
+#	-I$(top_srcdir)/src/testing
+#src_client_linux_linux_client_unittest_shlib_LDFLAGS = \
+#	-shared \
+#	-Wl,-h,linux_client_unittest_shlib
+#src_client_linux_linux_client_unittest_shlib_LDADD = \
+#	src/client/linux/handler/exception_handler.o \
+#	src/client/linux/handler/minidump_descriptor.o \
+#	src/client/linux/log/log.o \
+#	src/client/linux/crash_generation/crash_generation_client.o \
+#	src/client/linux/minidump_writer/linux_dumper.o \
+#	src/client/linux/minidump_writer/linux_ptrace_dumper.o \
+#	src/client/linux/minidump_writer/minidump_writer.o \
+#	src/client/minidump_file_writer.o \
+#	src/common/convert_UTF.o \
+#	src/common/md5.o \
+#	src/common/linux/elfutils.o \
+#	src/common/linux/file_id.o \
+#	src/common/linux/guid_creator.o \
+#	src/common/linux/linux_libc_support.o \
+#	src/common/linux/memory_mapped_file.o \
+#	src/common/linux/safe_readlink.o \
+#	src/common/string_conversion.o \
+#	$(PTHREAD_CFLAGS) $(PTHREAD_LIBS)
+#if ANDROID_HOST
+#src_client_linux_linux_client_unittest_shlib_SOURCES += \
+#	src/common/android/breakpad_getcontext_unittest.cc
+#src_client_linux_linux_client_unittest_shlib_LDFLAGS += \
+#	-llog -lm
+#endif
 
-src_client_linux_linux_client_unittest_shlib_DEPENDENCIES = \
-	src/client/linux/linux_dumper_unittest_helper \
-	src/client/linux/libbreakpad_client.a \
-	src/libbreakpad.a
+#src_client_linux_linux_client_unittest_shlib_DEPENDENCIES = \
+#	src/client/linux/linux_dumper_unittest_helper \
+#	src/client/linux/libbreakpad_client.a \
+#	src/libbreakpad.a
+#
+#src_client_linux_linux_client_unittest_SOURCES =
+#src_client_linux_linux_client_unittest_LDFLAGS = \
+#	-Wl,-rpath,'$$ORIGIN'
+#if ANDROID_HOST
+#src_client_linux_linux_client_unittest_LDFLAGS += \
+#        -llog
+#endif
 
-src_client_linux_linux_client_unittest_SOURCES =
-src_client_linux_linux_client_unittest_LDFLAGS = \
-	-Wl,-rpath,'$$ORIGIN'
-if ANDROID_HOST
-src_client_linux_linux_client_unittest_LDFLAGS += \
-        -llog
-endif
-
-src_client_linux_linux_client_unittest_LDADD = \
-	src/client/linux/linux_client_unittest_shlib
-
-src_client_linux_linux_client_unittest_DEPENDENCIES = \
-	src/client/linux/linux_client_unittest_shlib
+#src_client_linux_linux_client_unittest_LDADD = \
+#	src/client/linux/linux_client_unittest_shlib
+#
+#src_client_linux_linux_client_unittest_DEPENDENCIES = \
+#	src/client/linux/linux_client_unittest_shlib
 
 if !DISABLE_TOOLS
-src_tools_linux_core2md_core2md_SOURCES = \
-	src/tools/linux/core2md/core2md.cc \
-	src/client/linux/minidump_writer/linux_core_dumper.cc \
-	src/common/linux/elf_core_dump.cc
-
-src_tools_linux_core2md_core2md_LDADD = \
-	src/client/linux/libbreakpad_client.a
+#src_tools_linux_core2md_core2md_SOURCES = \
+#	src/tools/linux/core2md/core2md.cc \
+#	src/client/linux/minidump_writer/linux_core_dumper.cc \
+#	src/common/linux/elf_core_dump.cc
+#
+#src_tools_linux_core2md_core2md_LDADD = \
+#	src/client/linux/libbreakpad_client.a
 
 src_tools_linux_dump_syms_dump_syms_SOURCES = \
 	src/common/dwarf_cfi_to_module.cc \
@@ -459,6 +460,8 @@ src_tools_linux_dump_syms_dump_syms_SOURCES = \
 	src/common/dwarf/bytereader.cc \
 	src/common/dwarf/dwarf2diehandler.cc \
 	src/common/dwarf/dwarf2reader.cc \
+        src/common/arm_ex_reader.cc \
+        src/common/arm_ex_to_module.cc \
 	src/common/linux/dump_symbols.cc \
 	src/common/linux/elf_symbols_to_module.cc \
 	src/common/linux/elfutils.cc \
@@ -1114,6 +1117,10 @@ EXTRA_DIST = \
 	src/common/convert_UTF.h \
 	src/common/linux/dump_symbols.cc \
 	src/common/linux/dump_symbols.h \
+        src/common/arm_ex_reader.cc \
+        src/common/arm_ex_reader.h \
+        src/common/arm_ex_to_module.cc \
+        src/common/arm_ex_to_module.h \
 	src/common/linux/elf_symbols_to_module.cc \
 	src/common/linux/elf_symbols_to_module.h \
 	src/common/linux/elfutils.cc \
