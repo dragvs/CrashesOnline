@@ -129,7 +129,8 @@ static bool HashElfTextSection(const void *elf_mapped_base,
 
   my_memset(identifier, 0, kMDGUIDSize);
   const uint8_t* ptr = reinterpret_cast<const uint8_t*>(text_section);
-  const uint8_t* ptr_end = ptr + std::min(text_size, 4096);
+  // const uint8_t* ptr_end = ptr + std::min(text_size, 4096);
+  const uint8_t* ptr_end = ptr + text_size;
   while (ptr < ptr_end) {
     for (unsigned i = 0; i < kMDGUIDSize; i++)
       identifier[i] ^= ptr[i];

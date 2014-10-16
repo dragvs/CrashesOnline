@@ -62,12 +62,14 @@ using google_breakpad::CodeModules;
 using google_breakpad::Minidump;
 using google_breakpad::MinidumpProcessor;
 using google_breakpad::OnDemandSymbolSupplier;
+using google_breakpad::SimpleSymbolSupplier;
 using google_breakpad::PathnameStripper;
 using google_breakpad::ProcessState;
 using google_breakpad::scoped_ptr;
 using google_breakpad::StackFrame;
 using google_breakpad::StackFramePPC;
 using google_breakpad::StackFrameX86;
+using google_breakpad::StackFrameARM;
 using google_breakpad::SystemInfo;
 
 typedef struct {
@@ -76,15 +78,6 @@ typedef struct {
   NSString *symbolSearchDir;
   BOOL printThreadMemory;
 } Options;
-
-//=============================================================================
-static int PrintRegister(const char *name, u_int32_t value, int sequence) {
-  if (sequence % 4 == 0) {
-    printf("\n");
-  }
-  printf("%6s = 0x%08x ", name, value);
-  return ++sequence;
-}
 
 //=============================================================================
 static void PrintStack(const CallStack *stack, const string &cpu) {
@@ -135,61 +128,105 @@ static void PrintStack(const CallStack *stack, const string &cpu) {
 }
 
 //=============================================================================
+static int PrintRegister(const char *name, u_int32_t value, int sequence) {
+	if (sequence % 4 == 0) {
+		printf("\n");
+	}
+	printf("%6s = 0x%08x ", name, value);
+	return ++sequence;
+}
+
+//=============================================================================
+static void PrintRegisters(const StackFrame *frame, const string &cpu) {
+	int sequence = 0;
+	if (cpu == "x86") {
+		const StackFrameX86 *frame_x86 =
+		reinterpret_cast<const StackFrameX86*>(frame);
+		
+		if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_EIP)
+			sequence = PrintRegister("eip", frame_x86->context.eip, sequence);
+		if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_ESP)
+			sequence = PrintRegister("esp", frame_x86->context.esp, sequence);
+		if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_EBP)
+			sequence = PrintRegister("ebp", frame_x86->context.ebp, sequence);
+		if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_EBX)
+			sequence = PrintRegister("ebx", frame_x86->context.ebx, sequence);
+		if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_ESI)
+			sequence = PrintRegister("esi", frame_x86->context.esi, sequence);
+		if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_EDI)
+			sequence = PrintRegister("edi", frame_x86->context.edi, sequence);
+		if (frame_x86->context_validity == StackFrameX86::CONTEXT_VALID_ALL) {
+			sequence = PrintRegister("eax", frame_x86->context.eax, sequence);
+			sequence = PrintRegister("ecx", frame_x86->context.ecx, sequence);
+			sequence = PrintRegister("edx", frame_x86->context.edx, sequence);
+			sequence = PrintRegister("efl", frame_x86->context.eflags, sequence);
+		}
+	} else if (cpu == "ppc") {
+		const StackFramePPC *frame_ppc =
+		reinterpret_cast<const StackFramePPC*>(frame);
+		
+		if ((frame_ppc->context_validity & StackFramePPC::CONTEXT_VALID_ALL) ==
+			StackFramePPC::CONTEXT_VALID_ALL) {
+			sequence = PrintRegister("srr0", frame_ppc->context.srr0, sequence);
+			sequence = PrintRegister("srr1", frame_ppc->context.srr1, sequence);
+			sequence = PrintRegister("cr", frame_ppc->context.cr, sequence);
+			sequence = PrintRegister("xer", frame_ppc->context.xer, sequence);
+			sequence = PrintRegister("lr", frame_ppc->context.lr, sequence);
+			sequence = PrintRegister("ctr", frame_ppc->context.ctr, sequence);
+			sequence = PrintRegister("mq", frame_ppc->context.mq, sequence);
+			sequence = PrintRegister("vrsave", frame_ppc->context.vrsave, sequence);
+			
+			sequence = 0;
+			char buffer[5];
+			for (int i = 0; i < MD_CONTEXT_PPC_GPR_COUNT; ++i) {
+				sprintf(buffer, "r%d", i);
+				sequence = PrintRegister(buffer, frame_ppc->context.gpr[i], sequence);
+			}
+		} else {
+			if (frame_ppc->context_validity & StackFramePPC::CONTEXT_VALID_SRR0)
+				sequence = PrintRegister("srr0", frame_ppc->context.srr0, sequence);
+			if (frame_ppc->context_validity & StackFramePPC::CONTEXT_VALID_GPR1)
+				sequence = PrintRegister("r1", frame_ppc->context.gpr[1], sequence);
+		}
+	} else if (cpu == "arm") {
+		const StackFrameARM *frame_arm =
+		reinterpret_cast<const StackFrameARM*>(frame);
+		
+		if (frame_arm->context_validity & StackFrameARM::CONTEXT_VALID_R11)
+			sequence = PrintRegister("fp", frame_arm->context.iregs[MD_CONTEXT_ARM_REG_FP], sequence);
+		if (frame_arm->context_validity & StackFrameARM::CONTEXT_VALID_R13)
+			sequence = PrintRegister("sp", frame_arm->context.iregs[MD_CONTEXT_ARM_REG_SP], sequence);
+		if (frame_arm->context_validity & StackFrameARM::CONTEXT_VALID_R14)
+			sequence = PrintRegister("lr", frame_arm->context.iregs[MD_CONTEXT_ARM_REG_LR], sequence);
+		if (frame_arm->context_validity & StackFrameARM::CONTEXT_VALID_R15)
+			sequence = PrintRegister("pc", frame_arm->context.iregs[MD_CONTEXT_ARM_REG_PC], sequence);
+		if (frame_arm->context_validity == StackFrameX86::CONTEXT_VALID_ALL) {
+			sequence = PrintRegister("r0", frame_arm->context.iregs[0], sequence);
+			sequence = PrintRegister("r1", frame_arm->context.iregs[1], sequence);
+			sequence = PrintRegister("r2", frame_arm->context.iregs[2], sequence);
+			sequence = PrintRegister("r7", frame_arm->context.iregs[7], sequence);
+			// ..r10 common registers
+		}
+	}
+	
+	printf("\n");
+}
+
 static void PrintRegisters(const CallStack *stack, const string &cpu) {
-  int sequence = 0;
-  const StackFrame *frame = stack->frames()->at(0);
-  if (cpu == "x86") {
-    const StackFrameX86 *frame_x86 =
-      reinterpret_cast<const StackFrameX86*>(frame);
+	unsigned int stack_frame_count = stack->frames()->size();
+	
+	if (stack_frame_count > 10)
+		stack_frame_count = 10;
+	
+	for (unsigned int stack_frame_idx = 0;
+		 stack_frame_idx < stack_frame_count;
+		 ++stack_frame_idx) {
+		const StackFrame *frame = stack->frames()->at(stack_frame_idx);
+		printf("\n#%d:", stack_frame_idx);
+		PrintRegisters(frame, cpu);
+	}
 
-    if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_EIP)
-      sequence = PrintRegister("eip", frame_x86->context.eip, sequence);
-    if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_ESP)
-      sequence = PrintRegister("esp", frame_x86->context.esp, sequence);
-    if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_EBP)
-      sequence = PrintRegister("ebp", frame_x86->context.ebp, sequence);
-    if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_EBX)
-      sequence = PrintRegister("ebx", frame_x86->context.ebx, sequence);
-    if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_ESI)
-      sequence = PrintRegister("esi", frame_x86->context.esi, sequence);
-    if (frame_x86->context_validity & StackFrameX86::CONTEXT_VALID_EDI)
-      sequence = PrintRegister("edi", frame_x86->context.edi, sequence);
-    if (frame_x86->context_validity == StackFrameX86::CONTEXT_VALID_ALL) {
-      sequence = PrintRegister("eax", frame_x86->context.eax, sequence);
-      sequence = PrintRegister("ecx", frame_x86->context.ecx, sequence);
-      sequence = PrintRegister("edx", frame_x86->context.edx, sequence);
-      sequence = PrintRegister("efl", frame_x86->context.eflags, sequence);
-    }
-  } else if (cpu == "ppc") {
-    const StackFramePPC *frame_ppc =
-      reinterpret_cast<const StackFramePPC*>(frame);
-
-    if ((frame_ppc->context_validity & StackFramePPC::CONTEXT_VALID_ALL) ==
-        StackFramePPC::CONTEXT_VALID_ALL) {
-      sequence = PrintRegister("srr0", frame_ppc->context.srr0, sequence);
-      sequence = PrintRegister("srr1", frame_ppc->context.srr1, sequence);
-      sequence = PrintRegister("cr", frame_ppc->context.cr, sequence);
-      sequence = PrintRegister("xer", frame_ppc->context.xer, sequence);
-      sequence = PrintRegister("lr", frame_ppc->context.lr, sequence);
-      sequence = PrintRegister("ctr", frame_ppc->context.ctr, sequence);
-      sequence = PrintRegister("mq", frame_ppc->context.mq, sequence);
-      sequence = PrintRegister("vrsave", frame_ppc->context.vrsave, sequence);
-
-      sequence = 0;
-      char buffer[5];
-      for (int i = 0; i < MD_CONTEXT_PPC_GPR_COUNT; ++i) {
-        sprintf(buffer, "r%d", i);
-        sequence = PrintRegister(buffer, frame_ppc->context.gpr[i], sequence);
-      }
-    } else {
-      if (frame_ppc->context_validity & StackFramePPC::CONTEXT_VALID_SRR0)
-        sequence = PrintRegister("srr0", frame_ppc->context.srr0, sequence);
-      if (frame_ppc->context_validity & StackFramePPC::CONTEXT_VALID_GPR1)
-        sequence = PrintRegister("r1", frame_ppc->context.gpr[1], sequence);
-    }
-  }
-
-  printf("\n");
+	printf("\n");
 }
 
 static void PrintModules(const CodeModules *modules) {
@@ -229,8 +266,15 @@ static void ProcessSingleReport(Options *options, NSString *file_path) {
     [options->searchDir fileSystemRepresentation] : "";
   string symbol_search_dir = options->symbolSearchDir ?
     [options->symbolSearchDir fileSystemRepresentation] : "";
-  scoped_ptr<OnDemandSymbolSupplier> symbol_supplier(
-    new OnDemandSymbolSupplier(search_dir, symbol_search_dir));
+	
+//  scoped_ptr<OnDemandSymbolSupplier> symbol_supplier(
+//    new OnDemandSymbolSupplier(search_dir, symbol_search_dir));
+	
+	scoped_ptr<SimpleSymbolSupplier> symbol_supplier;
+	if (!symbol_search_dir.empty()) {
+		symbol_supplier.reset(new SimpleSymbolSupplier(symbol_search_dir));
+	}
+	
   scoped_ptr<MinidumpProcessor>
     minidump_processor(new MinidumpProcessor(symbol_supplier.get(), &resolver));
   ProcessState process_state;
@@ -240,6 +284,11 @@ static void ProcessSingleReport(Options *options, NSString *file_path) {
     fprintf(stderr, "Minidump %s could not be read\n", dump->path().c_str());
     return;
   }
+
+	// Printing modules info
+//	google_breakpad::MinidumpModuleList* moduleList = dump->GetModuleList();
+//	moduleList->Print();
+	
   if (minidump_processor->Process(dump.get(), &process_state) !=
       google_breakpad::PROCESS_OK) {
     fprintf(stderr, "MinidumpProcessor::Process failed\n");
@@ -299,7 +348,7 @@ static void ProcessSingleReport(Options *options, NSString *file_path) {
 
   // Print the crashed registers
   if (requesting_thread != -1) {
-    printf("\nThread %d:", requesting_thread);
+    printf("\nThread %d registers:", requesting_thread);
     PrintRegisters(process_state.threads()->at(requesting_thread), cpu);
   }
 

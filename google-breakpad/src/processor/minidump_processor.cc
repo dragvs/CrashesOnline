@@ -44,6 +44,8 @@
 #include "processor/logging.h"
 #include "processor/stackwalker_x86.h"
 
+//#define DUMP_CRASHED_STACK
+
 namespace google_breakpad {
 
 MinidumpProcessor::MinidumpProcessor(SymbolSupplier *supplier,
@@ -228,7 +230,28 @@ ProcessResult MinidumpProcessor::Process(
     if (!thread_memory) {
       BPLOG(ERROR) << "No memory region for " << thread_string;
     }
-
+	  
+	  
+	  // Stack dump only for crashed thread
+#ifdef DUMP_CRASHED_STACK
+	  if (thread_id == requesting_thread_id) {
+		  uint64_t currentAddr = thread_memory->GetBase();
+		  uint32_t memoryRegionSize = thread_memory->GetSize();
+		  uint64_t endAddr = currentAddr + memoryRegionSize;
+		  
+		  BPLOG(INFO) << "Memory dump. Base addr 0x" << std::hex << currentAddr << ", size " << memoryRegionSize;
+		  
+		  while(currentAddr < endAddr) {
+			  uint32_t value;
+			  if (!thread_memory->GetMemoryAtAddress(currentAddr, &value)) {
+				  BPLOG(ERROR) << "Cannot get memory value at address 0x" << std::hex << currentAddr;
+			  }
+			  BPLOG(INFO) << "Addr 0x" << std::hex << currentAddr << " | value 0x" << std::hex << value;
+			  currentAddr += 4;
+		  }
+	  }
+#endif
+	  
     // Use process_state->modules_ instead of module_list, because the
     // |modules| argument will be used to populate the |module| fields in
     // the returned StackFrame objects, which will be placed into the

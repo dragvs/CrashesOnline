@@ -206,9 +206,27 @@ StackFrameARM* StackwalkerARM::GetCallerByFramePointer(
   if (last_fp && !memory_->GetMemoryAtAddress(last_fp, &caller_fp)) {
     BPLOG(ERROR) << "Unable to read caller_fp from last_fp: 0x"
                  << std::hex << last_fp;
+	  
     return NULL;
   }
-
+	
+	// Check caller FP validity
+	uint32_t super_caller_fp = 0;
+	if (!memory_->GetMemoryAtAddress(caller_fp, &super_caller_fp)) {
+		BPLOG(ERROR) << "Caller FP points wrong address caller_fp: 0x"
+						<< std::hex << caller_fp;
+		
+		// trying to fix FP
+		last_fp -= 4;
+		caller_fp = 0;
+		if (last_fp && !memory_->GetMemoryAtAddress(last_fp, &caller_fp)) {
+			BPLOG(ERROR) << "Unable to read caller_fp from last_fp: 0x"
+			<< std::hex << last_fp;
+			
+			return NULL;
+		}
+	}
+	
   uint32_t caller_lr = 0;
   if (last_fp && !memory_->GetMemoryAtAddress(last_fp + 4, &caller_lr)) {
     BPLOG(ERROR) << "Unable to read caller_lr from last_fp + 4: 0x"
@@ -260,8 +278,8 @@ StackFrame* StackwalkerARM::GetCallerFrame(const CallStack* stack,
     frame.reset(GetCallerByFramePointer(frames));
 
   // If everuthing failed, fall back to stack scanning.
-  if (stack_scan_allowed && !frame.get())
-    frame.reset(GetCallerByStackScan(frames));
+//  if (stack_scan_allowed && !frame.get())
+//    frame.reset(GetCallerByStackScan(frames));
 
   // If nothing worked, tell the caller.
   if (!frame.get())

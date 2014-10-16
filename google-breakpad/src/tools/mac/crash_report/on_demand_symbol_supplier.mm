@@ -85,11 +85,13 @@ OnDemandSymbolSupplier::OnDemandSymbolSupplier(const string &search_dir,
           // Check file to see if it is of appropriate type, and grab module
           // name.
           NSScanner *scanner = [NSScanner scannerWithString:dataStr];
-          BOOL goodScan = [scanner scanString:@"MODULE mac " intoString:nil];
+          BOOL goodScan = [scanner scanString:@"MODULE mac " intoString:nil] ||
+							[scanner scanString:@"MODULE Linux " intoString:nil];
           if (goodScan) {
             goodScan = ([scanner scanString:@"x86 " intoString:nil] ||
                         [scanner scanString:@"x86_64 " intoString:nil] ||
-                        [scanner scanString:@"ppc " intoString:nil]);
+                        [scanner scanString:@"ppc " intoString:nil] ||
+						[scanner scanString:@"arm " intoString:nil]);
             if (goodScan) {
               NSString *moduleID;
               goodScan = [scanner scanCharactersFromSet:hexSet 
