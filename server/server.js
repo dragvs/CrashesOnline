@@ -500,6 +500,12 @@ function uploadClientLib(request, response) {
     var nextProgressToReport = 0;
     var progressReportStep = 0;
 
+    if (!configData["enableClientLibUpload"]) {
+        //console.log("Skipping client lib upload");
+        sendTextResponse(response, "Operation: OK", 200);
+        return;
+    }
+
     var form = createIncomingForm(clientLibTempPath);
     form.on('progress', function(bytesReceived, bytesExpected) {
         var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
