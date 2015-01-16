@@ -1,20 +1,24 @@
 {
 	"clientsFilePath" : "clients.json",
 
-	"dumpSymsToolPath" : 		"../tools/google-breakpad/x86_64-linux/dump_syms",
-	"_dumpSymsToolPath" : 		"../tools/google-breakpad/mac/dump_syms",
+	"_dumpSymsToolPath" : 		"../tools/google-breakpad/x86_64-linux/dump_syms",
+	"dumpSymsToolPath" : 		"../tools/google-breakpad/mac/dump_syms",
 	"symbolicationToolPath" : 	"../tools/google-breakpad/mac/minidump_stackwalk",
 	"_symbolicationToolPath" : 	"../tools/google-breakpad/x86_64-linux/minidump_stackwalk",
 
-	"workingFolderPath" : 		"tegra2",
+	"workingFolderPath" : 		"test_ds2",
 
 	"symbolsFolderPath" :   	"symbols",
 	"clientLibTargetPath" : 	"clientLibUpload",
 	"clientLibTempPath" :   	"tmp_clientLibUpload",
 	"clientDumpTargetPath" :	"dumpUpload",
 	"clientDumpTempPath" :  	"tmp_dumpUpload",
+	"productLibTargetPath" : 	"productLibUpload",
+	"productLibTempPath" :   	"tmp_productLibUpload",
 
 	"enableClientLibUpload" : 	true,
+	"enableProductLibUpload" : 	true,
+	"enabledClientLibUploadTags": [ "alawar_test" ],
 
 	"db_connection_url" :		"mongodb://localhost/test",
 	"http_server_port" :		80

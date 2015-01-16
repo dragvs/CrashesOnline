@@ -29,6 +29,9 @@ var server = http.createServer(function(req, res) {
         case '/ucl':
             uploadClientLib(req, res);
             break;
+        case '/upl':
+            uploadProductLib(req, res);
+            break;
         case '/ucd':
             uploadClientDump(req, res);
             break;
@@ -45,7 +48,7 @@ var server = http.createServer(function(req, res) {
             showDumpMeta(req, res);
             break;
         default:
-            sendTextResponse(res, "You'r doing it wrong!", 404);
+            sendTextResponse(res, "You'r doing this wrong!", 404);
             break;
     }
 });
@@ -70,6 +73,8 @@ var clientLibTargetPath;
 var clientLibTempPath;
 var clientDumpTargetPath;
 var clientDumpTempPath;
+var productLibTargetPath;
+var productLobTempPath;
 
 // Database
 var CrashDump;
@@ -148,12 +153,16 @@ function readServerConfig(callback) {
         clientLibTempPath       = workingFolderPath + "/" + configData["clientLibTempPath"];
         clientDumpTargetPath    = workingFolderPath + "/" + configData["clientDumpTargetPath"];
         clientDumpTempPath      = workingFolderPath + "/" + configData["clientDumpTempPath"];
+        productLibTargetPath    = workingFolderPath + "/" + configData["productLibTargetPath"];
+        productLibTempPath      = workingFolderPath + "/" + configData["productLibTempPath"];
 
         checkAndCreateDir(symbolsFolderPath);
         checkAndCreateDir(clientLibTargetPath);
         checkAndCreateDir(clientLibTempPath);
         checkAndCreateDir(clientDumpTargetPath);
         checkAndCreateDir(clientDumpTempPath);
+        checkAndCreateDir(productLibTargetPath);
+        checkAndCreateDir(productLibTempPath);
 
         // Clients config
         readClientsConfig(function(err) {
@@ -390,14 +399,19 @@ function getFileNameWithoutExt(filePath) {
 function display_form(request, response) {
     console.log("::display_form begin");
 
+    var api_key = "Itp9g4219uvmPxXYUmR546VjbXrJGknhdh5GY72gUoGxujzHbczj31PNKsXE25rYCS0ukQyGyCOX9IbszYzq3A==";
+    var app_id = "com.redsteep.simpleapp";
+    var app_version = "1.0 dev-1";
+
     var body = '<h1>Hello!</h1>'+
         '<form action="/ucl" method="post" enctype="multipart/form-data">'+
-        '<input type="text" name="apiKey" style="width: 750px;" value="Itp9g4219uvmPxXYUmR546VjbXrJGknhdh5GY72gUoGxujzHbczj31PNKsXE25rYCS0ukQyGyCOX9IbszYzq3A=="><br/>'+
-        '<input type="text" name="appId" style="width: 250px;" value="com.redsteep.simpleapp"><br/>'+
-        '<input type="text" name="appVersion" value="1.0 dev-1"><br/>'+
+        '<input type="text" name="apiKey" style="width: 750px;" value="{0}"><br/>'+
+        '<input type="text" name="appId" style="width: 250px;" value="{1}"><br/>'+
+        '<input type="text" name="appVersion" value="{2}"><br/>'+
         '<input type="file" name="upload-file" style="width: 400px;">'+
         '<input type="submit" value="Upload">'+
-        '</form>';
+        '</form>'.format(api_key, app_id, app_version);
+
     sendHtmlResponse(response, body, 200);
 }
 
@@ -409,13 +423,29 @@ function createIncomingForm(uploadDir) {
         console.log("Form on File begin: " + file.name);
     });
 
-    // form.on('progress', function(bytesReceived, bytesExpected) {
-    //     var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
-    //     var receivedKb = (bytesReceived / 1024).toFixed(1);
-    //     var expectedKb = (bytesExpected / 1024).toFixed(1);
-     
-    //     console.log("Form Uploading " + receivedKb + " Kb of " + expectedKb + " Kb (" + progress + "%)");
-    // });
+    var nextProgressToReport = 0;
+    var progressReportStep = 0;
+
+    form.on('progress', function(bytesReceived, bytesExpected) {
+        var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
+        var kbytesReceived = bytesReceived / 1024;
+        var kbytesExpected = bytesExpected / 1024;
+
+        if (progressReportStep == 0) {
+            if (kbytesExpected > 0) {
+                progressReportStep = kbytesExpected / 10;
+            } else {
+                progressReportStep = 200;
+            }
+        }
+
+        if (kbytesReceived > nextProgressToReport) {
+            nextProgressToReport = ((kbytesReceived/progressReportStep) + 1) * progressReportStep;
+
+            console.log("Form Uploading " + kbytesReceived.toFixed(1) + 
+                " Kb of " + kbytesExpected.toFixed(1) + " Kb (" + progress + "%)");
+        }
+    });
 
     form.on('error', function(err) {
         console.error("Form error: " + err);
@@ -497,37 +527,19 @@ function checkIsZipFile(filePath, callback) {
 function uploadClientLib(request, response) {
     // if (request.method.toLowerCase() == 'post')
 
-    var nextProgressToReport = 0;
-    var progressReportStep = 0;
+    var query = url.parse(request.url, true).query;
+    var requestTag = query["tag"];
+    // console.log("::uploadClientLib Upload request tag: " + requestTag);
 
-    if (!configData["enableClientLibUpload"]) {
+    var tagEnabled = requestTag && configData["enabledClientLibUploadTags"].indexOf(requestTag) != -1;
+
+    if (!configData["enableClientLibUpload"] || !tagEnabled) {
         //console.log("Skipping client lib upload");
-        sendTextResponse(response, "Operation: OK", 200);
+        sendTextResponse(response, "Operation: Forbidden", 503);
         return;
     }
 
     var form = createIncomingForm(clientLibTempPath);
-    form.on('progress', function(bytesReceived, bytesExpected) {
-        var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
-        var kbytesReceived = bytesReceived / 1024;
-        var kbytesExpected = bytesExpected / 1024;
-
-        if (progressReportStep == 0) {
-            if (kbytesExpected > 0) {
-                progressReportStep = kbytesExpected / 10;
-            } else {
-                progressReportStep = 200;
-            }
-        }
-
-        if (kbytesReceived > nextProgressToReport) {
-            nextProgressToReport = ((kbytesReceived/progressReportStep) + 1) * progressReportStep;
-
-            console.log("Form Uploading " + kbytesReceived.toFixed(1) + 
-                " Kb of " + kbytesExpected.toFixed(1) + " Kb (" + progress + "%)");
-        }
-    });
-
     form.parse(request, function(err, fields, files) {
         console.log("Form[client lib] on Parse");
 
@@ -571,13 +583,13 @@ function uploadClientLib(request, response) {
                     if (err) return errorResponse(err);
                     console.log("::uploadClientLib Zip file extracted");
 
-                    handleUploadedLib(file, metaData, function(err) {
+                    handleUploadedLib(file, metaData, clientLibTargetPath, function(err) {
                         if (err) return errorResponse(err);
                         sendTextResponse(response, "Operation: OK", 200);
                     });
                 });
             } else {
-                handleUploadedLib(file, metaData, function(err) {
+                handleUploadedLib(file, metaData, clientLibTargetPath, function(err) {
                     if (err) return errorResponse(err);
                     sendTextResponse(response, "Operation: OK", 200);
                 });
@@ -586,24 +598,98 @@ function uploadClientLib(request, response) {
     });
 }
 
-function handleUploadedLib(file, metaData, callback) {
-    var uploadTargetPath = clientLibTargetPath;
+// TODO Add database
+/*
+ * Handle file upload
+ */
+function uploadProductLib(request, response) {
+    // if (request.method.toLowerCase() == 'post')
 
+    if (!configData["enableProductLibUpload"]) {
+        console.log("Skipping product lib upload");
+        sendTextResponse(response, "Operation: Forbidden", 403);
+        return;
+    }
+
+    var query = url.parse(request.url, true).query;
+    var requestAppId = query["appId"];
+    console.log("::uploadProductLib Upload request appId: " + requestAppId);
+
+    var form = createIncomingForm(clientLibTempPath);
+    form.parse(request, function(err, fields, files) {
+        console.log("Form[product lib] on Parse");
+
+        var apiKey = fields['apiKey'];
+        var appId = fields['appId'];
+        var appVersion = fields['appVersion'];
+
+        console.log("   API key: " + apiKey);
+        console.log("   App id: " + appId);
+        console.log("   App version: " + appVersion);
+
+        var appConfig = findClientConfig(apiKey);
+        
+        if (!appConfig || appConfig.appId != appId) {
+            sendTextResponse(response, "ApiKey or App id is incorrect!", 403);
+            return;
+        }
+        if (!appConfig.libUpload) {
+            sendTextResponse(response, "Lib upload is restricted!", 403);
+            return;
+        }
+
+        var file = files['upload-file'];
+        var metaData = getClientMeta(fields, appConfig, appVersion);
+
+        var errorResponse = function(err) {
+            console.error("::uploadProductLib Failed with error: " + err);
+            sendTextResponse(response, "Operation: FAILED", 500);
+        }
+
+        checkIsZipFile(file.path, function(err, isZipFile) {
+            if (err) return errorResponse(err);
+
+            if (isZipFile) {
+                console.log("::uploadProductLib Uploaded file is Zip, extract");
+                
+                if (file.name.endsWith(".zip"))
+                    file.name = file.name.substring(0, file.name.length-4);
+
+                extractZippedFile(file.path, function(err) {
+                    if (err) return errorResponse(err);
+                    console.log("::uploadProductLib Zip file extracted");
+
+                    handleUploadedLib(file, metaData, productLibTargetPath, function(err) {
+                        if (err) return errorResponse(err);
+                        sendTextResponse(response, "Operation: OK", 200);
+                    });
+                });
+            } else {
+                handleUploadedLib(file, metaData, productLibTargetPath, function(err) {
+                    if (err) return errorResponse(err);
+                    sendTextResponse(response, "Operation: OK", 200);
+                });
+            }
+        });
+    });
+}
+
+function handleUploadedLib(file, metaData, libTargetPath, callback) {
     var tmpFileName = getFileNameWithoutExt(file.path);
-    var metaFilePath = uploadTargetPath + "/" + file.name + "." + tmpFileName + ".meta";
+    var metaFilePath = libTargetPath + "/" + file.name + "." + tmpFileName + ".meta";
 
     console.log("::handleUploadedLib MetaData str: " + JSON.stringify(metaData));
 
     fs.writeFile(metaFilePath, JSON.stringify(metaData), function (err) {
         if (err) {
-            console.error("::handleUploadedLib Saving client lib META error: " + err);
+            console.error("::handleUploadedLib Error while saving lib META: " + err);
             return callback && callback(err);
         }
 
-        console.log('::handleUploadedLib Client lib META saved');
+        console.log('::handleUploadedLib Lib META saved');
 
-        // TODO Run in parallel and wait for the operations to complete before 'processClientLib' call
-        var newFilePath = uploadTargetPath + "/" + file.name + "." + tmpFileName;
+        // TODO Run in parallel and wait for the operations to complete before 'extractSymsFromLib' call
+        var newFilePath = libTargetPath + "/" + file.name + "." + tmpFileName;
         console.log("::handleUploadedLib File target path " + newFilePath);
 
         fs.rename(file.path, newFilePath, function(err2) {  
@@ -612,7 +698,7 @@ function handleUploadedLib(file, metaData, callback) {
                 return callback && callback(err2);
             }
 
-            processClientLib(newFilePath, metaFilePath);
+            extractSymsFromLib(newFilePath, metaFilePath);
             console.log("::handleUploadedLib Uploaded tmp file renamed");
 
             callback && callback(null);
@@ -620,31 +706,31 @@ function handleUploadedLib(file, metaData, callback) {
     });
 }
 
-function processClientLib(libPath, metaFilePath) {
+function extractSymsFromLib(libPath, metaFilePath) {
     var symFilePath = libPath + ".sym";
     var command = dumpSymsToolPath + " " + libPath + " > " + symFilePath;
 
-    console.log("::processClientLib executing dump_syms command: " + command);
+    console.log("::extractSymsFromLib executing dump_syms command: " + command);
 
     var child1 = exec(command, function (error, stdout, stderr) {
-        console.log("::processClientLib dump_syms exec finished");
+        console.log("::extractSymsFromLib dump_syms exec finished");
 
         if (error !== null) {
-            console.error('::processClientLib dump_syms exec error: ' + error);
-            console.log("::processClientLib dump_syms exec stderr: " + stderr);
+            console.error('::extractSymsFromLib dump_syms exec error: ' + error);
+            console.log("::extractSymsFromLib dump_syms exec stderr: " + stderr);
         } else {
-            console.log("::processClientLib dump_syms exec stderr: " + stderr);
+            console.log("::extractSymsFromLib dump_syms exec stderr: " + stderr);
 
             var headCommand = "head -n1 " + symFilePath;
-            console.log("::processClientLib executing head command: " + headCommand);
+            console.log("::extractSymsFromLib executing head command: " + headCommand);
 
             var child2 = exec(headCommand, function(error, stdout, stderr) {
-                console.log("::processClientLib head exec finished");
-                console.log("::processClientLib head exec stdout: " + stdout);
-                console.log("::processClientLib head exec stderr: " + stderr);
+                console.log("::extractSymsFromLib head exec finished");
+                console.log("::extractSymsFromLib head exec stdout: " + stdout);
+                console.log("::extractSymsFromLib head exec stderr: " + stderr);
 
                 if (error !== null) {
-                    console.error('::processClientLib head exec error: ' + error);
+                    console.error('::extractSymsFromLib head exec error: ' + error);
                 } else {
                     // MODULE <OS> <arch> <so_uuid> <so_name>
                     var headerArr = stdout.split(" ");
@@ -720,32 +806,7 @@ function uploadClientDump(request, response) {
 
     var uploadTargetPath = clientDumpTargetPath;
 
-
-    var nextProgressToReport = 0;
-    var progressReportStep = 0;
-
     var form = createIncomingForm(clientDumpTempPath);
-    form.on('progress', function(bytesReceived, bytesExpected) {
-        var progress = (bytesReceived / bytesExpected * 100).toFixed(2);
-        var kbytesReceived = bytesReceived / 1024;
-        var kbytesExpected = bytesExpected / 1024;
-
-        if (progressReportStep == 0) {
-            if (kbytesExpected > 0) {
-                progressReportStep = kbytesExpected / 10;
-            } else {
-                progressReportStep = 50;
-            }
-        }
-
-        if (kbytesReceived > nextProgressToReport) {
-            nextProgressToReport = ((kbytesReceived/progressReportStep) + 1) * progressReportStep;
-
-            console.log("Form Uploading " + kbytesReceived.toFixed(1) + 
-                " Kb of " + kbytesExpected.toFixed(1) + " Kb (" + progress + "%)");
-        }
-    });
-
     form.parse(request, function(err, fields, files) {
         console.log("::uploadClientDump Form[client dump] on Parse");
 
