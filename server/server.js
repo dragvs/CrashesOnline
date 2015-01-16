@@ -557,10 +557,10 @@ function uploadClientLib(request, response) {
             sendTextResponse(response, "ApiKey or App id is incorrect!", 403);
             return;
         }
-        if (!appConfig.libUpload) {
-            sendTextResponse(response, "Lib upload is restricted!", 403);
-            return;
-        }
+        // if (!appConfig.libUpload) {
+        //     sendTextResponse(response, "Lib upload is restricted!", 403);
+        //     return;
+        // }
 
         var file = files['upload-file'];
         var metaData = getClientMeta(fields, appConfig, appVersion);
@@ -633,10 +633,10 @@ function uploadProductLib(request, response) {
             sendTextResponse(response, "ApiKey or App id is incorrect!", 403);
             return;
         }
-        if (!appConfig.libUpload) {
-            sendTextResponse(response, "Lib upload is restricted!", 403);
-            return;
-        }
+        // if (!appConfig.libUpload) {
+        //     sendTextResponse(response, "Lib upload is restricted!", 403);
+        //     return;
+        // }
 
         var file = files['upload-file'];
         var metaData = getClientMeta(fields, appConfig, appVersion);

@@ -1,16 +1,68 @@
 [
 	{
-		"description": "simpleapp",
-		"apiKey": "Itp9g4219uvmPxXYUmR546VjbXrJGknhdh5GY72gUoGxujzHbczj31PNKsXE25rYCS0ukQyGyCOX9IbszYzq3A==",
-		"appId": "com.redsteep.simpleapp",
-		"libUpload": true,
-		"dumpUpload": true
-	},
+        "description": "hotd3googfree",
+        "apiKey": "ik0RvCzdCs+KrV9fENTWNshOEjero6NxMS7rct0QGG8F5916uefJC2Mq9KA/e4aexYQz7hM/3uCUd7wagld5VA==",
+        "appId": "com.bigfishgames.hotdsfgoogfree",
+        "libUpload": true,
+        "dumpUpload": true
+    },
+    {
+        "description": "hotd3googfull",
+        "apiKey": "9n3dWd2/ByPCRuCujXBZGpnPCV5J3+MMsojd3ZqptzXksYqG9wAk37dcPNwBhUIBFNsUFeJLWVbUcXKAtioDng==",
+        "appId": "com.bigfishgames.hotdsfgoogfull",
+        "libUpload": true,
+        "dumpUpload": true
+    },
+    {
+        "description": "hotd3amznfree",
+        "apiKey": "34rFE385ePMsbmMkI5jzOk1j+tabRUxO5WICpg+NXvbgRF4CtGgNVhXHBvvzYjd1jj3ZluoUWhyS08nH7gNo9Q==",
+        "appId": "com.bigfishgames.hotdsfamznfree",
+        "libUpload": true,
+        "dumpUpload": true
+    },
+    {
+        "description": "hotd3amznfull",
+        "apiKey": "z9VKVaRXcsyHaJgfZudxD8phF7rVdcad2l849gS6pry85O1Hd5bW8ayMB67NdmDzoyi3nlP8uEM9lCZ6k3yZWA==",
+        "appId": "com.bigfishgames.hotdsfamznfull",
+        "libUpload": true,
+        "dumpUpload": true
+    },
+
 	{
-		"description": "simpleappfull",
-		"apiKey": "Wh+po3JpF5Kh63Nslh1feKB8rV7PkVQVQRWOe6jaoCuGyJ5KQwPQ5SXAjp0qe1JkzTlEGwih7MKCgxsn0hEl9A==",
-		"appId": "com.redsteep.simpleappfull",
-		"libUpload": true,
-		"dumpUpload": true
-	}
+        "description": "hotd3devfree",
+        "apiKey": "t3AWtHcc8C7q7lY+eJyh8+ZC6IOt0KXyaj1V6pqLa++09xRGIdw8b1KLzCj0AnygKlshxffmWzWo/Ys98lCvjQ==",
+        "appId": "com.redsteep.hotd3free",
+        "libUpload": true,
+        "dumpUpload": true
+    },
+
+
+    {
+        "description": "ds2devfree",
+        "apiKey": "70zzEk91fa+8pstwduL3nfHG5KCU6oYd1kChnkqnK/yUGEhslsiFCw/dXWG74m9ZHbXEmanR3R/Je3QKvQwZgg==",
+        "appId": "com.redsteep.ds2free",
+        "libUpload": true,
+        "dumpUpload": true
+    },
+    {
+        "description": "ds2googfree",
+        "apiKey": "dBhy9O3dupgDivAqbfpBRu4d/eIOFO+c2+cqM7brFlRq5nkY1sS60UPeFwkpBYzzORprHEwZhOElnj9SnaUHDA==",
+        "appId": "com.alawar.darkstrokes2.gplay.free",
+        "libUpload": true,
+        "dumpUpload": true
+    },
+    {
+        "description": "ds2googfull",
+        "apiKey": "JFeFrkAI80SfW58qK7HmcVOWoH/fkbGLdFpk2Alwpx1ED26hxjZ2M4IK7jtkbSYid74dVLxFvYkAydfIj26S4g==",
+        "appId": "com.alawar.darkstrokes2.gplay",
+        "libUpload": true,
+        "dumpUpload": true
+    },
+    {
+        "description": "ds2amznfull",
+        "apiKey": "lbRdyeG83BDrOQK3B0Rb8qkuo0ixSC/RSIs+PAT0es7q9JhN9Z9VcOjXbU2gml84nW/A5LFeKfn+Up36yBv5YA==",
+        "appId": "com.alawar.darkstrokes2.amazon.premium",
+        "libUpload": true,
+        "dumpUpload": true
+    }
 ]
