@@ -74,7 +74,7 @@ var clientLibTempPath;
 var clientDumpTargetPath;
 var clientDumpTempPath;
 var productLibTargetPath;
-var productLobTempPath;
+var productLibTempPath;
 
 // Database
 var CrashDump;
@@ -403,14 +403,14 @@ function display_form(request, response) {
     var app_id = "com.redsteep.simpleapp";
     var app_version = "1.0 dev-1";
 
-    var body = '<h1>Hello!</h1>'+
-        '<form action="/ucl" method="post" enctype="multipart/form-data">'+
+    var body = ('<h1>Hello!</h1>'+
+        '<form action="/upl" method="post" enctype="multipart/form-data">'+
         '<input type="text" name="apiKey" style="width: 750px;" value="{0}"><br/>'+
         '<input type="text" name="appId" style="width: 250px;" value="{1}"><br/>'+
         '<input type="text" name="appVersion" value="{2}"><br/>'+
         '<input type="file" name="upload-file" style="width: 400px;">'+
         '<input type="submit" value="Upload">'+
-        '</form>'.format(api_key, app_id, app_version);
+        '</form>').format(api_key, app_id, app_version);
 
     sendHtmlResponse(response, body, 200);
 }
@@ -502,21 +502,56 @@ function extractZippedFile(zipFilePath, callback) {
 /*
  * Zip file detection
  */
+// function checkIsZipFile(filePath, callback) {
+//     var fileStream = fs.createReadStream(filePath, { start: 0, end: 3 });
+//
+//     fileStream.on('readable', function() {
+//         // 0x50 0x4B 0x03 0x04
+//         // Assuming we will get at least four bytes in the first event
+//         var buffer = fileStream.read(4);
+//         // console.log("::checkIsZipFile Magic: " + buffer.toString('hex'));
+//
+//         var isZipFile = buffer && buffer.length >= 4 && 
+//             buffer[0] == 0x50 && buffer[1] == 0x4B &&
+//             buffer[2] == 0x03 && buffer[3] == 0x04;
+//         callback && callback(null, isZipFile);
+//     });
+//     fileStream.on('error', function(err) {
+//         return callback && callback(err, false);
+//     });
+// }
 function checkIsZipFile(filePath, callback) {
-    var fileStream = fs.createReadStream(filePath);
+    fs.open(filePath, "r", function(err, fd) {
+        if (err) {
+            console.error("::checkIsZipFile Failed to open file: " + filePath + " with error: " + err);
+            return callback && callback(err, false);
+        }
 
-    fileStream.on('readable', function() {
-        // 0x50 0x4B 0x03 0x04
-        var magicBytes = fileStream.read(4);
-        // console.log("::checkIsZipFile Magic: " + magicBytes.toString('hex'));
+        var buffer = new Buffer(10);
 
-        var isZipFile = magicBytes && magicBytes.length == 4 && 
-            magicBytes[0] == 0x50 && magicBytes[1] == 0x4B &&
-            magicBytes[2] == 0x03 && magicBytes[3] == 0x04;
-        callback && callback(null, isZipFile);
-    });
-    fileStream.on('error', function(err) {
-        callback && callback(err, false);
+        fs.read(fd, buffer, 0, buffer.length, 0, function(err2, bytesRead, buffer) {
+            if (err2) {
+                var errMsg = "Failed to read file: " + filePath + " with error: " + err;
+                console.error("::checkIsZipFile " + errMsg);
+                fs.close(fd);
+                return callback && callback(errMsg, false);
+            }
+            if (bytesRead < buffer.length) {
+                var errMsg = "Read " + bytesRead + " instead of " + buffer.length;
+                console.error("::checkIsZipFile " + errMsg);
+                fs.close(fd);
+                return callback && callback(errMsg, false);
+            }
+
+            // 0x50 0x4B 0x03 0x04
+            // console.log("::checkIsZipFile First 10 bytes: " + buffer.toString('hex'));
+            var isZipFile = buffer && buffer.length >= 4 && 
+                buffer[0] == 0x50 && buffer[1] == 0x4B &&
+                buffer[2] == 0x03 && buffer[3] == 0x04;
+       
+            fs.close(fd);
+            callback && callback(null, isZipFile);
+        });
     });
 }
 
@@ -573,6 +608,8 @@ function uploadClientLib(request, response) {
         checkIsZipFile(file.path, function(err, isZipFile) {
             if (err) return errorResponse(err);
 
+            // console.log("::uploadClientLib finished checkIsZipFile on: " + isZipFile);
+
             if (isZipFile) {
                 console.log("::uploadClientLib Uploaded file is Zip, extract");
                 
@@ -615,7 +652,7 @@ function uploadProductLib(request, response) {
     var requestAppId = query["appId"];
     console.log("::uploadProductLib Upload request appId: " + requestAppId);
 
-    var form = createIncomingForm(clientLibTempPath);
+    var form = createIncomingForm(productLibTempPath);
     form.parse(request, function(err, fields, files) {
         console.log("Form[product lib] on Parse");
 
@@ -648,6 +685,8 @@ function uploadProductLib(request, response) {
 
         checkIsZipFile(file.path, function(err, isZipFile) {
             if (err) return errorResponse(err);
+
+            // console.log("::uploadProductLib finished checkIsZipFile on: " + isZipFile);
 
             if (isZipFile) {
                 console.log("::uploadProductLib Uploaded file is Zip, extract");
@@ -989,12 +1028,12 @@ function showCrashReport(request, response) {
 
         var command = symbolicationToolPath + " " + dumpFilePath + " " + symbolsFolderPath;
 
-        var child1 = exec(command, function(err, stdout, stderr) {
+        var child1 = exec(command, { maxBuffer: 10*1024*1024 }, function(err, stdout, stderr) {
             console.log("::showCrashReport crash report exec finished");
 
             if (err) {
                 console.error("::showCrashReport symbolication exec error: " + err);
-                console.error("::showCrashReport symbolication exec stderr: " + stderr);
+                console.error("::showCrashReport symbolication exec stderr (first 1000 symbols): " + stderr.substr(0, 1000));
                 sendTextResponse(response, "Operation: FAILED", 500);
                 return;
             }
